@@ -102,15 +102,15 @@ class StateManager:
             logger.warning("Failed to load state file: %s", err)
 
     def _save_state(self) -> None:
-        """Persist current state to disk."""
+        """Persist current state to disk (atomic write via rename)."""
         data = {
             "active_pc": self._active_pc,
             "last_updated": time.time(),
         }
+        tmp_file = self.state_file.with_suffix(".tmp")
         try:
-            self.state_file.write_text(
-                json.dumps(data, indent=2),
-                encoding="utf-8",
-            )
+            tmp_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+            tmp_file.replace(self.state_file)
         except OSError as err:
             logger.error("Failed to save state file: %s", err)
+            tmp_file.unlink(missing_ok=True)

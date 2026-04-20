@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import logging
+import re
+import time
+from collections import deque
 from collections.abc import Callable, Coroutine
 from functools import wraps
 from typing import TYPE_CHECKING, Any
@@ -24,6 +27,9 @@ HandlerFunc = Callable[
     [Update, ContextTypes.DEFAULT_TYPE],
     Coroutine[Any, Any, None],
 ]
+
+_MAX_COMMANDS_PER_MINUTE = 30
+_PC_NAME_PATTERN = re.compile(r"^[a-z0-9_-]+$")
 
 
 def create_handlers(
@@ -51,6 +57,18 @@ def create_handlers(
         Mapping of handler names to async handler functions.
     """
 
+    command_timestamps: deque[float] = deque(maxlen=_MAX_COMMANDS_PER_MINUTE)
+
+    def _is_rate_limited() -> bool:
+        """Check if command rate limit has been exceeded."""
+        now = time.monotonic()
+        while command_timestamps and now - command_timestamps[0] > 60:
+            command_timestamps.popleft()
+        if len(command_timestamps) >= _MAX_COMMANDS_PER_MINUTE:
+            return True
+        command_timestamps.append(now)
+        return False
+
     def authorized(func: HandlerFunc) -> HandlerFunc:
         """Decorator to reject unauthorized chat IDs."""
 
@@ -77,7 +95,8 @@ def create_handlers(
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         """Handle /activate <pc_name> command."""
-        assert update.message is not None
+        if not update.message:
+            return
 
         if not context.args:
             await update.message.reply_text(
@@ -86,6 +105,11 @@ def create_handlers(
             return
 
         pc_name = context.args[0].strip().lower()
+        if not pc_name or len(pc_name) > 64 or not _PC_NAME_PATTERN.match(pc_name):
+            await update.message.reply_text(
+                "⚠️ Nome PC non valido. Usa solo lettere, numeri, - e _ (max 64 caratteri).",
+            )
+            return
         state.activate(pc_name)
         await update.message.reply_text(f"✅ PC attivo: {pc_name}")
         logger.info("PC activated: %s (by chat %d)", pc_name, authorized_chat_id)
@@ -96,7 +120,8 @@ def create_handlers(
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         """Handle /list command — show online PCs."""
-        assert update.message is not None
+        if not update.message:
+            return
 
         peers = state.get_online_peers()
         peer_dicts = [{"name": p.name, "last_heartbeat": p.last_heartbeat} for p in peers]
@@ -108,7 +133,8 @@ def create_handlers(
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         """Handle /status command — show active PC and cwd."""
-        assert update.message is not None
+        if not update.message:
+            return
 
         if not state.active_pc:
             await update.message.reply_text(
@@ -125,7 +151,8 @@ def create_handlers(
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         """Handle /cancel command — interrupt running command."""
-        assert update.message is not None
+        if not update.message:
+            return
 
         if not state.is_active:
             return
@@ -142,7 +169,8 @@ def create_handlers(
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         """Handle /help command."""
-        assert update.message is not None
+        if not update.message:
+            return
 
         help_text = (
             "🤖 *Telegram Terminal Bot*\n\n"
@@ -165,8 +193,10 @@ def create_handlers(
         context: ContextTypes.DEFAULT_TYPE,
     ) -> None:
         """Handle arbitrary text as shell command."""
-        assert update.message is not None
-        assert update.message.text is not None
+        if not update.message:
+            return
+        if not update.message.text:
+            return
 
         if not state.active_pc:
             await update.message.reply_text(
@@ -179,7 +209,14 @@ def create_handlers(
             return
 
         command = update.message.text.strip()
-        logger.info("Executing command: %s", command[:100])
+
+        if _is_rate_limited():
+            await update.message.reply_text(
+                "⚠️ Rate limit raggiunto (max 30 comandi/minuto). Riprova tra poco.",
+            )
+            return
+
+        logger.info("Executing command (len=%d)", len(command))
 
         result = await shell.execute(command)
 

@@ -10,6 +10,9 @@ WorkingDirectory=/home/%i/telegram-terminal-bot
 ExecStart=/home/%i/telegram-terminal-bot/.venv/bin/python -m src.bot
 Restart=always
 RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+TimeoutStopSec=15
 EnvironmentFile=/home/%i/telegram-terminal-bot/.env
 
 # Security hardening
@@ -18,6 +21,15 @@ ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/home/%i/telegram-terminal-bot
 PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+SystemCallFilter=@system-service
+CapabilityBoundingSet=
+AmbientCapabilities=
 
 [Install]
 WantedBy=multi-user.target

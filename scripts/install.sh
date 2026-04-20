@@ -20,9 +20,9 @@ error() { echo -e "${RED}[✗]${NC} $1" >&2; exit 1; }
 
 # --- Pre-flight checks ---
 
-echo "═══════════════════════════════════════════════"
+echo "═════════════════════════��═════════════════════"
 echo "  Telegram Terminal Bot — Installer"
-echo "═══════════════════════════════════════════════"
+echo "══════════════════════════════════���════════════"
 echo ""
 
 # Check Python version
@@ -51,24 +51,35 @@ if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
     cp -r "$SCRIPT_DIR"/src "$INSTALL_DIR/"
     cp "$SCRIPT_DIR"/pyproject.toml "$INSTALL_DIR/"
+    cp "$SCRIPT_DIR"/uv.lock "$INSTALL_DIR/" 2>/dev/null || true
     cp "$SCRIPT_DIR"/systemd/*.service "$INSTALL_DIR/" 2>/dev/null || true
     info "File progetto copiati in $INSTALL_DIR"
 else
     info "Esecuzione dalla directory di installazione"
 fi
 
-# Create virtualenv
-if [ ! -d "$VENV_DIR" ]; then
-    "$PYTHON_CMD" -m venv "$VENV_DIR"
-    info "Virtualenv creato in $VENV_DIR"
+# Install dependencies — prefer uv, fallback to pip with pinned versions
+if command -v uv &>/dev/null; then
+    cd "$INSTALL_DIR"
+    uv sync --frozen --no-dev
+    info "Dipendenze installate (uv sync)"
 else
-    info "Virtualenv esistente trovato"
-fi
+    # Create virtualenv
+    if [ ! -d "$VENV_DIR" ]; then
+        "$PYTHON_CMD" -m venv "$VENV_DIR"
+        info "Virtualenv creato in $VENV_DIR"
+    else
+        info "Virtualenv esistente trovato"
+    fi
 
-# Install dependencies
-"$VENV_DIR/bin/pip" install --upgrade pip --quiet
-"$VENV_DIR/bin/pip" install python-telegram-bot python-dotenv --quiet
-info "Dipendenze installate"
+    # Install with pinned versions from pyproject.toml constraints
+    "$VENV_DIR/bin/pip" install --upgrade pip --quiet
+    "$VENV_DIR/bin/pip" install \
+        "python-telegram-bot>=20.7,<21.0" \
+        "python-dotenv>=1.0.0" \
+        --quiet
+    info "Dipendenze installate (pip con versioni pinnate)"
+fi
 
 # Create .env if not exists
 if [ ! -f "$INSTALL_DIR/.env" ]; then
@@ -93,9 +104,9 @@ fi
 # --- Post-install instructions ---
 
 echo ""
-echo "═══════════════════════════════════════════════"
+echo "════════════════════════════════���══════════════"
 echo "  Installazione completata!"
-echo "═══════════════════════════════════════════════"
+echo "═════════════════════════════���═════════════════"
 echo ""
 echo "Prossimi passi:"
 echo ""

@@ -11,11 +11,12 @@ from pathlib import Path
 from telegram.ext import (
     Application,
     CommandHandler,
+    ContextTypes,
     MessageHandler,
     filters,
 )
 
-from src.config import load_settings
+from src.config import ConfigurationError, load_settings
 from src.handlers import create_handlers
 from src.shell_session import ShellSession
 from src.state_manager import StateManager
@@ -26,11 +27,14 @@ _HEARTBEAT_PREFIX = "__HB__"
 
 
 def setup_logging() -> None:
-    """Configure structured logging to stdout."""
+    """Configure structured logging to stdout. LOG_LEVEL configurable via env."""
+    import os
+
+    level = os.getenv("LOG_LEVEL", "INFO").upper()
     logging.basicConfig(
-        level=logging.INFO,
-        format="[%(asctime)s] [%(levelname)s] %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S",
+        level=getattr(logging, level, logging.INFO),
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        datefmt="%Y-%m-%dT%H:%M:%S",
         stream=sys.stdout,
     )
     # Silence noisy libraries
@@ -216,6 +220,12 @@ def build_application(env_path: Path | None = None) -> Application:
         ),
     )
 
+    # Global error handler
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        logger.error("Unhandled exception: %s", context.error, exc_info=context.error)
+
+    app.add_error_handler(error_handler)
+
     return app
 
 
@@ -227,7 +237,12 @@ def main() -> None:
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, signal.default_int_handler)
 
-    app = build_application()
+    try:
+        app = build_application()
+    except ConfigurationError as err:
+        logger.critical("Startup failed: %s", err.message)
+        sys.exit(1)
+
     logger.info("Starting Telegram Terminal Bot...")
     app.run_polling(drop_pending_updates=True)
 

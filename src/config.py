@@ -3,11 +3,18 @@
 from __future__ import annotations
 
 import os
-import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 from dotenv import load_dotenv
+
+
+class ConfigurationError(Exception):
+    """Raised when application configuration is invalid or missing."""
+
+    def __init__(self, message: str) -> None:
+        self.message = message
+        super().__init__(f"Configuration error: {message}")
 
 
 @dataclass(frozen=True, slots=True, repr=False)
@@ -75,6 +82,5 @@ def load_settings(env_path: Path | None = None) -> Settings:
 
 
 def _fatal(message: str) -> None:
-    """Print error and exit. Used only during startup validation."""
-    print(f"[FATAL] Configuration error: {message}", file=sys.stderr)
-    sys.exit(1)
+    """Raise ConfigurationError for invalid settings."""
+    raise ConfigurationError(message)

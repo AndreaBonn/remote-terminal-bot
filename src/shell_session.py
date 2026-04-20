@@ -11,10 +11,12 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+_MAX_OUTPUT_BYTES = 512 * 1024  # 512 KB hard cap
+
 
 def _generate_marker() -> str:
     """Generate a unique, unpredictable end marker per session."""
-    return f"__END_{secrets.token_hex(8)}__"
+    return f"__END_{secrets.token_hex(16)}__"
 
 
 @dataclass
@@ -91,8 +93,8 @@ class ShellSession:
             logger.warning("Shell process dead, respawning")
             await self._spawn_shell()
 
-        assert self._process is not None
-        assert self._process.stdin is not None
+        if not self._process or not self._process.stdin:
+            raise RuntimeError("Shell process failed to start")
 
         # Write command + marker to stdin
         payload = f'{command}\necho "{self._end_marker}$?"\necho "{self._end_marker}" >&2\n'
@@ -138,23 +140,43 @@ class ShellSession:
 
     async def _read_output(self) -> tuple[list[str], list[str]]:
         """Read stdout and stderr until end markers are found."""
-        assert self._process is not None
-        assert self._process.stdout is not None
-        assert self._process.stderr is not None
+        if not self._process or not self._process.stdout or not self._process.stderr:
+            return [], []
 
         stdout_lines: list[str] = []
         stderr_lines: list[str] = []
+        total_bytes = 0
+        truncated = False
 
         # Read stdout until marker
         while True:
             line = await self._process.stdout.readline()
             if not line:
                 break
-            decoded = line.decode().rstrip("\n")
+            decoded = line.decode(errors="replace").rstrip("\n")
             if decoded.startswith(self._end_marker):
                 stdout_lines.append(decoded)
                 break
+            total_bytes += len(decoded) + 1
+            if total_bytes > _MAX_OUTPUT_BYTES:
+                truncated = True
+                # Drain remaining stdout until marker
+                while True:
+                    drain_line = await self._process.stdout.readline()
+                    if not drain_line:
+                        break
+                    if (
+                        drain_line.decode(errors="replace")
+                        .rstrip("\n")
+                        .startswith(self._end_marker)
+                    ):
+                        stdout_lines.append(drain_line.decode(errors="replace").rstrip("\n"))
+                        break
+                break
             stdout_lines.append(decoded)
+
+        if truncated:
+            stdout_lines.append("[OUTPUT TRUNCATED: exceeded 512KB limit]")
 
         # Read available stderr (non-blocking drain)
         while True:
@@ -165,7 +187,7 @@ class ShellSession:
                 )
                 if not line:
                     break
-                decoded = line.decode().rstrip("\n")
+                decoded = line.decode(errors="replace").rstrip("\n")
                 if decoded.startswith(self._end_marker):
                     break
                 stderr_lines.append(decoded)
@@ -179,9 +201,8 @@ class ShellSession:
         if not self._is_alive():
             return
 
-        assert self._process is not None
-        assert self._process.stdin is not None
-        assert self._process.stdout is not None
+        if not self._process or not self._process.stdin or not self._process.stdout:
+            return
 
         self._process.stdin.write(f'echo "{self._end_marker}__CWD__$(pwd)"\n'.encode())
         await self._process.stdin.drain()
@@ -223,10 +244,8 @@ class ShellSession:
         bool
             True if signal was sent, False if no process running.
         """
-        if not self._is_alive():
+        if not self._is_alive() or not self._process:
             return False
-
-        assert self._process is not None
         try:
             pgid = os.getpgid(self._process.pid)
             os.killpg(pgid, signal.SIGINT)
