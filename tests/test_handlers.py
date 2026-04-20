@@ -44,6 +44,7 @@ def mock_update() -> MagicMock:
     update = MagicMock()
     update.effective_chat = MagicMock()
     update.effective_chat.id = 12345
+    update.effective_chat.type = "private"
     update.message = MagicMock()
     update.message.reply_text = AsyncMock()
     update.message.text = "ls -la"
@@ -73,6 +74,12 @@ class TestAuthorization:
     @pytest.mark.asyncio
     async def test_no_effective_chat_is_rejected(self, handlers, mock_update, mock_context) -> None:
         mock_update.effective_chat = None
+        await handlers["help"](mock_update, mock_context)
+        mock_update.message.reply_text.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_non_private_chat_is_rejected(self, handlers, mock_update, mock_context) -> None:
+        mock_update.effective_chat.type = "group"
         await handlers["help"](mock_update, mock_context)
         mock_update.message.reply_text.assert_not_called()
 
@@ -164,6 +171,17 @@ class TestShellCommand:
         assert "Timeout" in reply
 
     @pytest.mark.asyncio
+    async def test_command_too_long_rejected(
+        self, handlers, mock_update, mock_context, mock_state, mock_shell
+    ) -> None:
+        mock_state.activate("test-pc")
+        mock_update.message.text = "x" * 2049
+        await handlers["shell_command"](mock_update, mock_context)
+        reply = mock_update.message.reply_text.call_args[0][0]
+        assert "troppo lungo" in reply
+        mock_shell.execute.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_rate_limiting_blocks_excess_commands(
         self, handlers, mock_update, mock_context, mock_state, mock_shell
     ) -> None:
@@ -236,3 +254,75 @@ class TestStatus:
         await handlers["status"](mock_update, mock_context)
         reply = mock_update.message.reply_text.call_args[0][0]
         assert "test-pc" in reply
+
+
+class TestHeartbeat:
+    """The heartbeat handler processes peer announcements."""
+
+    @pytest.mark.asyncio
+    async def test_valid_heartbeat_registers_peer(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_update.message.text = "__HB__desktop-01__"
+        mock_update.message.delete = AsyncMock()
+        await handlers["heartbeat"](mock_update, mock_context)
+        peer_names = [p.name for p in mock_state.get_online_peers()]
+        assert "desktop-01" in peer_names
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_deletes_message(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message.text = "__HB__laptop__"
+        mock_update.message.delete = AsyncMock()
+        await handlers["heartbeat"](mock_update, mock_context)
+        mock_update.message.delete.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_invalid_name_ignored(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_update.message.text = "__HB__../../etc__"
+        mock_update.message.delete = AsyncMock()
+        await handlers["heartbeat"](mock_update, mock_context)
+        peer_names = [p.name for p in mock_state.get_online_peers()]
+        assert "../../etc" not in peer_names
+        mock_update.message.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_empty_name_ignored(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_update.message.text = "__HB____"
+        mock_update.message.delete = AsyncMock()
+        await handlers["heartbeat"](mock_update, mock_context)
+        mock_update.message.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_too_long_name_ignored(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_update.message.text = f"__HB__{'a' * 65}__"
+        mock_update.message.delete = AsyncMock()
+        await handlers["heartbeat"](mock_update, mock_context)
+        mock_update.message.delete.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_unauthorized_chat_ignored(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_update.effective_chat.id = 99999
+        mock_update.message.text = "__HB__laptop__"
+        mock_update.message.delete = AsyncMock()
+        await handlers["heartbeat"](mock_update, mock_context)
+        peer_names = [p.name for p in mock_state.get_online_peers()]
+        assert "laptop" not in peer_names
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_delete_failure_handled_gracefully(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_update.message.text = "__HB__server__"
+        mock_update.message.delete = AsyncMock(side_effect=Exception("Forbidden"))
+        await handlers["heartbeat"](mock_update, mock_context)
+        # Should still register the heartbeat despite delete failure
+        peer_names = [p.name for p in mock_state.get_online_peers()]
+        assert "server" in peer_names

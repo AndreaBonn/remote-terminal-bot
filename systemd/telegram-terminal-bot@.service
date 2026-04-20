@@ -20,6 +20,7 @@ NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
 ReadWritePaths=/home/%i/telegram-terminal-bot
+ReadOnlyPaths=/etc /boot /usr /lib
 PrivateTmp=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
@@ -30,6 +31,11 @@ LockPersonality=true
 SystemCallFilter=@system-service
 CapabilityBoundingSet=
 AmbientCapabilities=
+UMask=0077
+MemoryMax=512M
+MemoryHigh=384M
+CPUQuota=50%
+TasksMax=64
 
 [Install]
 WantedBy=multi-user.target

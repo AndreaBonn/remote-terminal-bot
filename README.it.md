@@ -5,6 +5,7 @@
 [![CI](https://github.com/bonn/telegram-terminal-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/bonn/telegram-terminal-bot/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/bonn/telegram-terminal-bot/branch/main/graph/badge.svg)](https://codecov.io/gh/bonn/telegram-terminal-bot)
 
 **[🇬🇧 Read in English](README.md)**
 

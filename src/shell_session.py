@@ -107,7 +107,7 @@ class ShellSession:
                 timeout=self._timeout,
             )
         except asyncio.TimeoutError:
-            logger.warning("Command timed out after %ds: %s", self._timeout, command[:80])
+            logger.warning("Command timed out after %ds (len=%d)", self._timeout, len(command))
             await self._kill_and_respawn()
             return CommandResult(
                 output="",
@@ -207,18 +207,21 @@ class ShellSession:
         self._process.stdin.write(f'echo "{self._end_marker}__CWD__$(pwd)"\n'.encode())
         await self._process.stdin.drain()
 
-        while True:
-            line = await asyncio.wait_for(
-                self._process.stdout.readline(),
-                timeout=2,
-            )
-            if not line:
-                break
-            decoded = line.decode().rstrip("\n")
-            cwd_prefix = f"{self._end_marker}__CWD__"
-            if decoded.startswith(cwd_prefix):
-                self._cwd = decoded[len(cwd_prefix) :]
-                break
+        try:
+            while True:
+                line = await asyncio.wait_for(
+                    self._process.stdout.readline(),
+                    timeout=2,
+                )
+                if not line:
+                    break
+                decoded = line.decode().rstrip("\n")
+                cwd_prefix = f"{self._end_marker}__CWD__"
+                if decoded.startswith(cwd_prefix):
+                    self._cwd = decoded[len(cwd_prefix) :]
+                    break
+        except asyncio.TimeoutError:
+            logger.debug("Timeout reading cwd update, keeping previous: %s", self._cwd)
 
     async def _kill_and_respawn(self) -> None:
         """Kill current process group and start fresh."""

@@ -4,11 +4,22 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+
+_APP_NAME = "telegram-terminal-bot"
+
+
+def _default_state_path() -> Path:
+    """Return XDG-compliant state file path."""
+    data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+    app_dir = data_home / _APP_NAME
+    app_dir.mkdir(parents=True, exist_ok=True)
+    return app_dir / "state.json"
 
 
 @dataclass
@@ -29,7 +40,7 @@ class StateManager:
 
     machine_name: str
     heartbeat_interval: int = 60
-    state_file: Path = field(default_factory=lambda: Path.cwd() / "state.json")
+    state_file: Path = field(default_factory=lambda: _default_state_path())
     _active_pc: str = ""
     _peers: dict[str, PeerInfo] = field(default_factory=dict)
 
@@ -111,6 +122,7 @@ class StateManager:
         try:
             tmp_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp_file.replace(self.state_file)
+            self.state_file.chmod(0o600)
         except OSError as err:
             logger.error("Failed to save state file: %s", err)
             tmp_file.unlink(missing_ok=True)

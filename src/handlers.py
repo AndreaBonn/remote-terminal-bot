@@ -29,6 +29,7 @@ HandlerFunc = Callable[
 ]
 
 _MAX_COMMANDS_PER_MINUTE = 30
+_MAX_COMMAND_LENGTH = 2048
 _PC_NAME_PATTERN = re.compile(r"^[a-z0-9_-]+$")
 
 
@@ -57,7 +58,7 @@ def create_handlers(
         Mapping of handler names to async handler functions.
     """
 
-    command_timestamps: deque[float] = deque(maxlen=_MAX_COMMANDS_PER_MINUTE)
+    command_timestamps: deque[float] = deque()
 
     def _is_rate_limited() -> bool:
         """Check if command rate limit has been exceeded."""
@@ -78,6 +79,8 @@ def create_handlers(
             context: ContextTypes.DEFAULT_TYPE,
         ) -> None:
             if not update.effective_chat:
+                return
+            if update.effective_chat.type != "private":
                 return
             if update.effective_chat.id != authorized_chat_id:
                 logger.warning(
@@ -124,8 +127,7 @@ def create_handlers(
             return
 
         peers = state.get_online_peers()
-        peer_dicts = [{"name": p.name, "last_heartbeat": p.last_heartbeat} for p in peers]
-        await update.message.reply_text(format_peer_list(peer_dicts))
+        await update.message.reply_text(format_peer_list(peers))
 
     @authorized
     async def handle_status(
@@ -210,6 +212,12 @@ def create_handlers(
 
         command = update.message.text.strip()
 
+        if len(command) > _MAX_COMMAND_LENGTH:
+            await update.message.reply_text(
+                f"⚠️ Comando troppo lungo (max {_MAX_COMMAND_LENGTH} caratteri).",
+            )
+            return
+
         if _is_rate_limited():
             await update.message.reply_text(
                 "⚠️ Rate limit raggiunto (max 30 comandi/minuto). Riprova tra poco.",
@@ -230,6 +238,25 @@ def create_handlers(
         for msg in messages:
             await update.message.reply_text(msg)
 
+    async def handle_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Process incoming heartbeat messages from peer bots."""
+        if not update.message or not update.message.text:
+            return
+        if not update.effective_chat or update.effective_chat.id != authorized_chat_id:
+            return
+        text = update.message.text
+        prefix = "__HB__"
+        if not (text.startswith(prefix) and text.endswith("__")):
+            return
+        pc_name = text[len(prefix) : -2]
+        if not pc_name or len(pc_name) > 64 or not _PC_NAME_PATTERN.match(pc_name):
+            return
+        state.register_heartbeat(pc_name)
+        try:
+            await update.message.delete()
+        except Exception:
+            logger.debug("Failed to delete heartbeat message")
+
     return {
         "activate": handle_activate,
         "list": handle_list,
@@ -237,4 +264,5 @@ def create_handlers(
         "cancel": handle_cancel,
         "help": handle_help,
         "shell_command": handle_shell_command,
+        "heartbeat": handle_heartbeat,
     }

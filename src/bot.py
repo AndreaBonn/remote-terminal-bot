@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re  # noqa: F401 — used at runtime in filters.Regex
 import signal
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from src.config import ConfigurationError, load_settings
+from src.config import ConfigurationError, Settings, load_settings
 from src.handlers import create_handlers
 from src.shell_session import ShellSession
 from src.state_manager import StateManager
@@ -26,17 +27,23 @@ logger = logging.getLogger(__name__)
 _HEARTBEAT_PREFIX = "__HB__"
 
 
-def setup_logging() -> None:
-    """Configure structured logging to stdout. LOG_LEVEL configurable via env."""
-    import os
+def setup_logging(level: str = "INFO") -> None:
+    """Configure structured logging to stdout.
 
-    level = os.getenv("LOG_LEVEL", "INFO").upper()
+    Parameters
+    ----------
+    level : str
+        Log level name (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    """
+    resolved_level = getattr(logging, level, logging.INFO)
     logging.basicConfig(
-        level=getattr(logging, level, logging.INFO),
+        level=resolved_level,
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S",
         stream=sys.stdout,
     )
+    # Ensure level is applied even on reconfiguration
+    logging.getLogger().setLevel(resolved_level)
     # Silence noisy libraries
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("telegram").setLevel(logging.WARNING)
@@ -72,6 +79,7 @@ async def send_heartbeat(
             await app.bot.send_message(
                 chat_id=chat_id,
                 text=f"{_HEARTBEAT_PREFIX}{machine_name}__",
+                disable_notification=True,
             )
         except asyncio.CancelledError:
             break
@@ -133,20 +141,25 @@ async def post_shutdown(app: Application) -> None:
     logger.info("[%s] Bot shutdown complete", settings.machine_name)
 
 
-def build_application(env_path: Path | None = None) -> Application:
+def build_application(
+    env_path: Path | None = None, settings: Settings | None = None
+) -> Application:
     """Build and configure the Telegram bot application.
 
     Parameters
     ----------
     env_path : Path | None
         Path to .env file.
+    settings : Settings | None
+        Pre-loaded settings. If None, loads from env_path.
 
     Returns
     -------
     Application
         Fully configured bot application ready to run.
     """
-    settings = load_settings(env_path=env_path)
+    if settings is None:
+        settings = load_settings(env_path=env_path)
 
     shell = ShellSession(timeout=settings.command_timeout)
     state = StateManager(
@@ -182,32 +195,10 @@ def build_application(env_path: Path | None = None) -> Application:
     app.add_handler(CommandHandler("help", handlers["help"]))
 
     # Heartbeat message filter — intercept and process silently
-    async def heartbeat_filter(update, context):
-        if not update.message or not update.message.text:
-            return
-        if not update.effective_chat or update.effective_chat.id != settings.authorized_chat_id:
-            return
-        text = update.message.text
-        if text.startswith(_HEARTBEAT_PREFIX) and text.endswith("__"):
-            pc_name = text[len(_HEARTBEAT_PREFIX) : -2]
-            if (
-                not pc_name
-                or len(pc_name) > 64
-                or not pc_name.replace("-", "").replace("_", "").isalnum()
-            ):
-                return
-            state.register_heartbeat(pc_name)
-            # Delete heartbeat message to keep chat clean
-            try:
-                await update.message.delete()
-            except Exception:
-                pass
-            return
-
     app.add_handler(
         MessageHandler(
-            filters.TEXT & filters.Regex(f"^{_HEARTBEAT_PREFIX}"),
-            heartbeat_filter,
+            filters.TEXT & filters.Regex(f"^{re.escape(_HEARTBEAT_PREFIX)}"),
+            handlers["heartbeat"],
         ),
         group=-1,  # Process before other handlers
     )
@@ -231,6 +222,7 @@ def build_application(env_path: Path | None = None) -> Application:
 
 def main() -> None:
     """Main entry point."""
+    # Bootstrap logging early (reconfigured after settings load)
     setup_logging()
 
     # Handle graceful shutdown signals
@@ -238,7 +230,16 @@ def main() -> None:
         signal.signal(sig, signal.default_int_handler)
 
     try:
-        app = build_application()
+        settings = load_settings()
+    except ConfigurationError as err:
+        logger.critical("Startup failed: %s", err.message)
+        sys.exit(1)
+
+    # Reconfigure logging with validated level from settings
+    setup_logging(level=settings.log_level)
+
+    try:
+        app = build_application(settings=settings)
     except ConfigurationError as err:
         logger.critical("Startup failed: %s", err.message)
         sys.exit(1)

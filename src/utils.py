@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from src.state_manager import PeerInfo
 
 _TELEGRAM_MAX_LENGTH = 4096
 _CHUNK_SIZE = 4000  # Leave margin for formatting
@@ -105,13 +109,15 @@ def split_text(text: str, max_length: int = _CHUNK_SIZE) -> list[str]:
     return chunks
 
 
-def format_peer_list(peers: list[dict[str, str | float]]) -> str:
+def format_peer_list(peers: list[PeerInfo], now: float | None = None) -> str:
     """Format peer list for /list command response.
 
     Parameters
     ----------
-    peers : list[dict]
-        List of peer info dicts with 'name' and 'last_heartbeat' keys.
+    peers : list[PeerInfo]
+        List of peer info objects.
+    now : float | None
+        Current timestamp. If None, uses time.time().
 
     Returns
     -------
@@ -121,9 +127,10 @@ def format_peer_list(peers: list[dict[str, str | float]]) -> str:
     if not peers:
         return "🖥️ Nessun PC online."
 
-    now = time.time()
+    if now is None:
+        now = time.time()
     lines = ["🖥️ PC Online:"]
     for peer in peers:
-        elapsed = int(now - float(peer["last_heartbeat"]))
-        lines.append(f"  • {peer['name']}  (ultimo heartbeat: {elapsed}s fa)")
+        elapsed = int(now - peer.last_heartbeat)
+        lines.append(f"  • {peer.name}  (ultimo heartbeat: {elapsed}s fa)")
     return "\n".join(lines)

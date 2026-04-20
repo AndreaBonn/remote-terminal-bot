@@ -5,6 +5,7 @@
 [![CI](https://github.com/bonn/telegram-terminal-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/bonn/telegram-terminal-bot/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![codecov](https://codecov.io/gh/bonn/telegram-terminal-bot/branch/main/graph/badge.svg)](https://codecov.io/gh/bonn/telegram-terminal-bot)
 
 **[🇮🇹 Leggi in italiano](README.it.md)**
 
@@ -18,22 +19,13 @@ SSH from your phone is painful. VPNs require infrastructure. This bot gives you 
 
 ## Architecture
 
-```
-┌─────────────┐     ┌─────────────┐
-│  You (phone)│────▶│ Telegram API │
-└─────────────┘     └──────┬──────┘
-                           │ long polling
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-        ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │ Bot PC-1 │ │ Bot PC-2 │ │ Bot PC-N │
-        │ (active) │ │ (standby)│ │ (standby)│
-        └────┬─────┘ └──────────┘ └──────────┘
-             │
-        ┌────▼─────┐
-        │  bash    │  ← persistent session
-        │ subprocess│    (keeps cwd, env)
-        └──────────┘
+```mermaid
+graph TD
+    Phone["You (phone)"] -->|commands| TG["Telegram API"]
+    TG -->|long polling| PC1["Bot PC-1<br/>(active)"]
+    TG -->|long polling| PC2["Bot PC-2<br/>(standby)"]
+    TG -->|long polling| PCN["Bot PC-N<br/>(standby)"]
+    PC1 --> Shell["bash subprocess<br/>(persistent session)"]
 ```
 
 Each PC runs the same bot token. Only the **active** PC executes commands. Others listen silently and track heartbeats to know who's online.
@@ -160,6 +152,10 @@ systemd/                # Service template for multi-user deployment
 3. **End marker pattern** — commands are delimited by a cryptographic marker (`secrets.token_hex(16)`) to reliably parse output boundaries
 4. **Atomic state writes** — `state.json` uses write-tmp-then-rename to prevent corruption
 5. **Process group isolation** — `start_new_session=True` enables clean SIGKILL of entire process trees on timeout
+
+## Why not Docker?
+
+The bot's purpose is to control the **host system** — running it in a container would defeat the entire point. The shell session needs access to the host filesystem, processes, and network. systemd provides better security hardening (ProtectSystem, CapabilityBoundingSet, SystemCallFilter) than Docker for this use case, without the container escape risk surface.
 
 ## Development
 

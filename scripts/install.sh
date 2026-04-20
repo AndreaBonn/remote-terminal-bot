@@ -46,39 +46,38 @@ info "Python trovato: $PYTHON_CMD ($($PYTHON_CMD --version))"
 
 # --- Installation ---
 
-# Create install directory (copy project files)
+# Create install directory (sync project files, remove stale)
 if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
-    cp -r "$SCRIPT_DIR"/src "$INSTALL_DIR/"
-    cp "$SCRIPT_DIR"/pyproject.toml "$INSTALL_DIR/"
-    cp "$SCRIPT_DIR"/uv.lock "$INSTALL_DIR/" 2>/dev/null || true
-    cp "$SCRIPT_DIR"/systemd/*.service "$INSTALL_DIR/" 2>/dev/null || true
-    info "File progetto copiati in $INSTALL_DIR"
+    rsync -a --delete "$SCRIPT_DIR"/src/ "$INSTALL_DIR/src/"
+    rsync -a "$SCRIPT_DIR"/pyproject.toml "$INSTALL_DIR/"
+    rsync -a "$SCRIPT_DIR"/uv.lock "$INSTALL_DIR/" 2>/dev/null || true
+    mkdir -p "$INSTALL_DIR/systemd"
+    rsync -a "$SCRIPT_DIR"/systemd/*.service "$INSTALL_DIR/systemd/" 2>/dev/null || true
+    info "File progetto sincronizzati in $INSTALL_DIR"
 else
     info "Esecuzione dalla directory di installazione"
 fi
 
-# Install dependencies — prefer uv, fallback to pip with pinned versions
+# Install dependencies — require uv for deterministic builds
 if command -v uv &>/dev/null; then
     cd "$INSTALL_DIR"
     uv sync --frozen --no-dev
     info "Dipendenze installate (uv sync)"
 else
-    # Create virtualenv
-    if [ ! -d "$VENV_DIR" ]; then
-        "$PYTHON_CMD" -m venv "$VENV_DIR"
-        info "Virtualenv creato in $VENV_DIR"
+    warn "uv non trovato — installazione automatica..."
+    curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh
+    chmod +x /tmp/uv-install.sh
+    sh /tmp/uv-install.sh
+    rm -f /tmp/uv-install.sh
+    export PATH="$HOME/.local/bin:$PATH"
+    if command -v uv &>/dev/null; then
+        cd "$INSTALL_DIR"
+        uv sync --frozen --no-dev
+        info "uv installato e dipendenze sincronizzate"
     else
-        info "Virtualenv esistente trovato"
+        error "Impossibile installare uv. Installa manualmente: https://docs.astral.sh/uv/getting-started/installation/"
     fi
-
-    # Install with pinned versions from pyproject.toml constraints
-    "$VENV_DIR/bin/pip" install --upgrade pip --quiet
-    "$VENV_DIR/bin/pip" install \
-        "python-telegram-bot>=20.7,<21.0" \
-        "python-dotenv>=1.0.0" \
-        --quiet
-    info "Dipendenze installate (pip con versioni pinnate)"
 fi
 
 # Create .env if not exists
