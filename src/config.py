@@ -25,6 +25,7 @@ class Settings:
     authorized_chat_id: int
     machine_name: str
     command_timeout: int = 30
+    heartbeat_enabled: bool = True
     heartbeat_interval: int = 60
     log_level: str = "INFO"
 
@@ -51,10 +52,11 @@ class Settings:
             _fatal("COMMAND_TIMEOUT must be positive")
         if self.command_timeout > self._MAX_COMMAND_TIMEOUT:
             _fatal(f"COMMAND_TIMEOUT max allowed: {self._MAX_COMMAND_TIMEOUT}s")
-        if self.heartbeat_interval <= 0:
-            _fatal("HEARTBEAT_INTERVAL must be positive")
-        if self.heartbeat_interval > self._MAX_HEARTBEAT_INTERVAL:
-            _fatal(f"HEARTBEAT_INTERVAL max allowed: {self._MAX_HEARTBEAT_INTERVAL}s")
+        if self.heartbeat_enabled:
+            if self.heartbeat_interval <= 0:
+                _fatal("HEARTBEAT_INTERVAL must be positive")
+            if self.heartbeat_interval > self._MAX_HEARTBEAT_INTERVAL:
+                _fatal(f"HEARTBEAT_INTERVAL max allowed: {self._MAX_HEARTBEAT_INTERVAL}s")
         if self.log_level not in self._VALID_LOG_LEVELS:
             _fatal(f"LOG_LEVEL must be one of {self._VALID_LOG_LEVELS}, got: {self.log_level!r}")
 
@@ -82,11 +84,14 @@ def load_settings(env_path: Path | None = None) -> Settings:
     command_timeout = _parse_int_env("COMMAND_TIMEOUT", 30)
     heartbeat_interval = _parse_int_env("HEARTBEAT_INTERVAL", 60)
 
+    heartbeat_enabled = _parse_bool_env("HEARTBEAT_ENABLED", default=True)
+
     return Settings(
         bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
         authorized_chat_id=chat_id,
         machine_name=os.getenv("MACHINE_NAME", "").strip().lower(),
         command_timeout=command_timeout,
+        heartbeat_enabled=heartbeat_enabled,
         heartbeat_interval=heartbeat_interval,
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
     )
@@ -100,6 +105,17 @@ def _parse_int_env(key: str, default: int) -> int:
     except ValueError:
         _fatal(f"{key} must be an integer, got: {raw!r}")
         return default  # unreachable, satisfies type checker
+
+
+def _parse_bool_env(key: str, *, default: bool) -> bool:
+    """Parse a boolean environment variable (true/false, yes/no, 1/0)."""
+    raw = os.getenv(key, str(default)).strip().lower()
+    if raw in ("true", "yes", "1"):
+        return True
+    if raw in ("false", "no", "0"):
+        return False
+    _fatal(f"{key} must be true/false, got: {raw!r}")
+    return default  # unreachable, satisfies type checker
 
 
 def _fatal(message: str) -> None:

@@ -112,17 +112,24 @@ async def post_init(app: BotApp) -> None:
         except asyncio.CancelledError:
             pass
 
-    # Start heartbeat task
-    app.bot_data["heartbeat_task"] = asyncio.create_task(
-        send_heartbeat(
-            app=app,
-            chat_id=settings.authorized_chat_id,
-            machine_name=settings.machine_name,
-            interval=settings.heartbeat_interval,
-            state=state,
-        ),
-    )
-    logger.info("[%s] Bot started, online notification sent", settings.machine_name)
+    # Start heartbeat task (only if enabled)
+    if settings.heartbeat_enabled:
+        app.bot_data["heartbeat_task"] = asyncio.create_task(
+            send_heartbeat(
+                app=app,
+                chat_id=settings.authorized_chat_id,
+                machine_name=settings.machine_name,
+                interval=settings.heartbeat_interval,
+                state=state,
+            ),
+        )
+        logger.info(
+            "[%s] Bot started with heartbeat every %ds",
+            settings.machine_name,
+            settings.heartbeat_interval,
+        )
+    else:
+        logger.info("[%s] Bot started, heartbeat disabled", settings.machine_name)
 
 
 async def post_shutdown(app: BotApp) -> None:
