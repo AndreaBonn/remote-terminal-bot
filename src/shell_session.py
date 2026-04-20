@@ -7,6 +7,7 @@ import logging
 import os
 import secrets
 import signal
+import time
 from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ _MAX_OUTPUT_BYTES = 512 * 1024  # 512 KB hard cap
 
 
 def _generate_marker() -> str:
-    """Generate a unique, unpredictable end marker per session."""
+    """Generate a unique, unpredictable end marker per command."""
     return f"__END_{secrets.token_hex(16)}__"
 
 
@@ -35,12 +36,14 @@ class ShellSession:
     timeout-based termination with automatic session recreation.
     """
 
+    _IDLE_TIMEOUT = 1800  # 30 minutes of inactivity before session reset
+
     def __init__(self, timeout: int = 30) -> None:
         self._timeout = timeout
         self._process: asyncio.subprocess.Process | None = None
         self._cwd: str = os.path.expanduser("~")
         self._lock: asyncio.Lock | None = None
-        self._end_marker: str = _generate_marker()
+        self._last_activity: float = 0.0
 
     async def start(self) -> None:
         """Start or restart the persistent bash process."""
@@ -89,6 +92,13 @@ class ShellSession:
 
     async def _execute_locked(self, command: str) -> CommandResult:
         """Execute command while holding the lock."""
+        # Reset session if idle for too long (security: limit exposure window)
+        now = time.monotonic()
+        if self._last_activity > 0 and (now - self._last_activity) > self._IDLE_TIMEOUT:
+            logger.info("Session idle for >%ds, resetting", self._IDLE_TIMEOUT)
+            await self._kill_and_respawn()
+        self._last_activity = now
+
         if not self._is_alive():
             logger.warning("Shell process dead, respawning")
             await self._spawn_shell()
@@ -96,14 +106,17 @@ class ShellSession:
         if not self._process or not self._process.stdin:
             raise RuntimeError("Shell process failed to start")
 
+        # Generate fresh marker per-command to prevent marker injection
+        marker = _generate_marker()
+
         # Write command + marker to stdin
-        payload = f'{command}\necho "{self._end_marker}$?"\necho "{self._end_marker}" >&2\n'
+        payload = f'{command}\necho "{marker}$?"\necho "{marker}" >&2\n'
         self._process.stdin.write(payload.encode())
         await self._process.stdin.drain()
 
         try:
             stdout_lines, stderr_lines = await asyncio.wait_for(
-                self._read_output(),
+                self._read_output(marker),
                 timeout=self._timeout,
             )
         except asyncio.TimeoutError:
@@ -119,9 +132,9 @@ class ShellSession:
         exit_code = 0
         output_lines: list[str] = []
         for line in stdout_lines:
-            if line.startswith(self._end_marker):
+            if line.startswith(marker):
                 try:
-                    exit_code = int(line[len(self._end_marker) :])
+                    exit_code = int(line[len(marker) :])
                 except ValueError:
                     exit_code = 1
             else:
@@ -138,7 +151,7 @@ class ShellSession:
 
         return CommandResult(output=output, exit_code=exit_code)
 
-    async def _read_output(self) -> tuple[list[str], list[str]]:
+    async def _read_output(self, marker: str) -> tuple[list[str], list[str]]:
         """Read stdout and stderr until end markers are found."""
         if not self._process or not self._process.stdout or not self._process.stderr:
             return [], []
@@ -150,11 +163,16 @@ class ShellSession:
 
         # Read stdout until marker
         while True:
-            line = await self._process.stdout.readline()
+            try:
+                line = await self._process.stdout.readline()
+            except ValueError:
+                # Single line exceeded asyncio stream buffer limit (~64KB)
+                truncated = True
+                break
             if not line:
                 break
             decoded = line.decode(errors="replace").rstrip("\n")
-            if decoded.startswith(self._end_marker):
+            if decoded.startswith(marker):
                 stdout_lines.append(decoded)
                 break
             total_bytes += len(decoded) + 1
@@ -162,14 +180,13 @@ class ShellSession:
                 truncated = True
                 # Drain remaining stdout until marker
                 while True:
-                    drain_line = await self._process.stdout.readline()
+                    try:
+                        drain_line = await self._process.stdout.readline()
+                    except ValueError:
+                        continue
                     if not drain_line:
                         break
-                    if (
-                        drain_line.decode(errors="replace")
-                        .rstrip("\n")
-                        .startswith(self._end_marker)
-                    ):
+                    if drain_line.decode(errors="replace").rstrip("\n").startswith(marker):
                         stdout_lines.append(drain_line.decode(errors="replace").rstrip("\n"))
                         break
                 break
@@ -188,7 +205,7 @@ class ShellSession:
                 if not line:
                     break
                 decoded = line.decode(errors="replace").rstrip("\n")
-                if decoded.startswith(self._end_marker):
+                if decoded.startswith(marker):
                     break
                 stderr_lines.append(decoded)
             except asyncio.TimeoutError:
@@ -204,7 +221,8 @@ class ShellSession:
         if not self._process or not self._process.stdin or not self._process.stdout:
             return
 
-        self._process.stdin.write(f'echo "{self._end_marker}__CWD__$(pwd)"\n'.encode())
+        cwd_marker = _generate_marker()
+        self._process.stdin.write(f'echo "{cwd_marker}__CWD__$(pwd)"\n'.encode())
         await self._process.stdin.drain()
 
         try:
@@ -216,7 +234,7 @@ class ShellSession:
                 if not line:
                     break
                 decoded = line.decode().rstrip("\n")
-                cwd_prefix = f"{self._end_marker}__CWD__"
+                cwd_prefix = f"{cwd_marker}__CWD__"
                 if decoded.startswith(cwd_prefix):
                     self._cwd = decoded[len(cwd_prefix) :]
                     break

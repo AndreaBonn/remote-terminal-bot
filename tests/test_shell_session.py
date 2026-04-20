@@ -78,3 +78,23 @@ class TestShellSession:
     async def test_special_characters_in_command(self, shell: ShellSession) -> None:
         result = await shell.execute("echo 'hello world' | wc -w")
         assert result.output.strip() == "2"
+
+    @pytest.mark.asyncio
+    async def test_execute_before_start_raises_runtime_error(self) -> None:
+        session = ShellSession()
+        with pytest.raises(RuntimeError, match="start\\(\\) must be called"):
+            await session.execute("echo hi")
+
+    @pytest.mark.asyncio
+    async def test_large_output_is_truncated(self, shell: ShellSession) -> None:
+        # Generate output > 512KB using many lines (avoids readline buffer limit)
+        result = await shell.execute(
+            "python3 -c \"import sys; [sys.stdout.write('x' * 200 + '\\n') for _ in range(4000)]\""
+        )
+        assert "[OUTPUT TRUNCATED" in result.output
+
+    @pytest.mark.asyncio
+    async def test_cancel_on_unstarted_session(self) -> None:
+        session = ShellSession()
+        result = await session.cancel()
+        assert result is False

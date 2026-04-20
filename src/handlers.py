@@ -11,12 +11,13 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 from telegram import Update
-from telegram.constants import ParseMode
+from telegram.constants import ChatAction, ParseMode
 from telegram.ext import ContextTypes
 
 from src.utils import format_output, format_peer_list, format_timeout_message
 
 if TYPE_CHECKING:
+    from src.audit_log import AuditLog
     from src.shell_session import ShellSession
     from src.state_manager import StateManager
 
@@ -30,6 +31,7 @@ HandlerFunc = Callable[
 
 _MAX_COMMANDS_PER_MINUTE = 30
 _MAX_COMMAND_LENGTH = 2048
+_HEARTBEAT_PREFIX = "__HB__"
 _PC_NAME_PATTERN = re.compile(r"^[a-z0-9_-]+$")
 
 
@@ -38,6 +40,7 @@ def create_handlers(
     shell: ShellSession,
     authorized_chat_id: int,
     command_timeout: int,
+    audit_log: AuditLog | None = None,
 ) -> dict[str, HandlerFunc]:
     """Create handler functions with injected dependencies.
 
@@ -226,7 +229,19 @@ def create_handlers(
 
         logger.info("Executing command (len=%d)", len(command))
 
+        await update.message.chat.send_action(ChatAction.TYPING)
+        start_time = time.monotonic()
         result = await shell.execute(command)
+        duration_ms = int((time.monotonic() - start_time) * 1000)
+
+        if audit_log:
+            audit_log.record(
+                command=command,
+                exit_code=result.exit_code,
+                timed_out=result.timed_out,
+                machine_name=state.machine_name,
+                duration_ms=duration_ms,
+            )
 
         if result.timed_out:
             await update.message.reply_text(
@@ -238,14 +253,13 @@ def create_handlers(
         for msg in messages:
             await update.message.reply_text(msg)
 
+    @authorized
     async def handle_heartbeat(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Process incoming heartbeat messages from peer bots."""
         if not update.message or not update.message.text:
             return
-        if not update.effective_chat or update.effective_chat.id != authorized_chat_id:
-            return
         text = update.message.text
-        prefix = "__HB__"
+        prefix = _HEARTBEAT_PREFIX
         if not (text.startswith(prefix) and text.endswith("__")):
             return
         pc_name = text[len(prefix) : -2]

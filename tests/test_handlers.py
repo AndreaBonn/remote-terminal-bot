@@ -2,31 +2,12 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
 from src.handlers import create_handlers
-from src.shell_session import CommandResult, ShellSession
-from src.state_manager import StateManager
-
-
-@pytest.fixture
-def mock_shell() -> MagicMock:
-    shell = MagicMock(spec=ShellSession)
-    shell.cwd = "/home/user"
-    shell.execute = AsyncMock()
-    shell.cancel = AsyncMock()
-    return shell
-
-
-@pytest.fixture
-def mock_state(tmp_path) -> StateManager:
-    return StateManager(
-        machine_name="test-pc",
-        heartbeat_interval=60,
-        state_file=tmp_path / "state.json",
-    )
+from src.shell_session import CommandResult
 
 
 @pytest.fixture
@@ -37,23 +18,6 @@ def handlers(mock_state, mock_shell) -> dict:
         authorized_chat_id=12345,
         command_timeout=30,
     )
-
-
-@pytest.fixture
-def mock_update() -> MagicMock:
-    update = MagicMock()
-    update.effective_chat = MagicMock()
-    update.effective_chat.id = 12345
-    update.effective_chat.type = "private"
-    update.message = MagicMock()
-    update.message.reply_text = AsyncMock()
-    update.message.text = "ls -la"
-    return update
-
-
-@pytest.fixture
-def mock_context() -> MagicMock:
-    return MagicMock()
 
 
 class TestAuthorization:

@@ -8,6 +8,7 @@ import re  # noqa: F401 — used at runtime in filters.Regex
 import signal
 import sys
 from pathlib import Path
+from typing import Any
 
 from telegram.ext import (
     Application,
@@ -18,13 +19,14 @@ from telegram.ext import (
 )
 
 from src.config import ConfigurationError, Settings, load_settings
-from src.handlers import create_handlers
+from src.handlers import _HEARTBEAT_PREFIX, create_handlers
 from src.shell_session import ShellSession
 from src.state_manager import StateManager
 
 logger = logging.getLogger(__name__)
 
-_HEARTBEAT_PREFIX = "__HB__"
+# python-telegram-bot Application with default type parameters
+BotApp = Application[Any, Any, Any, Any, Any, Any]
 
 
 def setup_logging(level: str = "INFO") -> None:
@@ -50,7 +52,7 @@ def setup_logging(level: str = "INFO") -> None:
 
 
 async def send_heartbeat(
-    app: Application,
+    app: BotApp,
     chat_id: int,
     machine_name: str,
     interval: int,
@@ -88,7 +90,7 @@ async def send_heartbeat(
             await asyncio.sleep(5)
 
 
-async def post_init(app: Application) -> None:
+async def post_init(app: BotApp) -> None:
     """Called after bot initialization — send online notification."""
     settings = app.bot_data["settings"]
     shell = app.bot_data["shell"]
@@ -100,6 +102,15 @@ async def post_init(app: Application) -> None:
         chat_id=settings.authorized_chat_id,
         text=f"🟢 [{settings.machine_name}] è online",
     )
+
+    # Cancel any pre-existing heartbeat task to avoid duplicates
+    old_task = app.bot_data.get("heartbeat_task")
+    if old_task and not old_task.done():
+        old_task.cancel()
+        try:
+            await old_task
+        except asyncio.CancelledError:
+            pass
 
     # Start heartbeat task
     app.bot_data["heartbeat_task"] = asyncio.create_task(
@@ -114,7 +125,7 @@ async def post_init(app: Application) -> None:
     logger.info("[%s] Bot started, online notification sent", settings.machine_name)
 
 
-async def post_shutdown(app: Application) -> None:
+async def post_shutdown(app: BotApp) -> None:
     """Called during shutdown — send offline notification and cleanup."""
     settings = app.bot_data["settings"]
     shell = app.bot_data["shell"]
@@ -141,9 +152,7 @@ async def post_shutdown(app: Application) -> None:
     logger.info("[%s] Bot shutdown complete", settings.machine_name)
 
 
-def build_application(
-    env_path: Path | None = None, settings: Settings | None = None
-) -> Application:
+def build_application(env_path: Path | None = None, settings: Settings | None = None) -> BotApp:
     """Build and configure the Telegram bot application.
 
     Parameters
@@ -161,17 +170,21 @@ def build_application(
     if settings is None:
         settings = load_settings(env_path=env_path)
 
+    from src.audit_log import AuditLog
+
     shell = ShellSession(timeout=settings.command_timeout)
     state = StateManager(
         machine_name=settings.machine_name,
         heartbeat_interval=settings.heartbeat_interval,
     )
+    audit = AuditLog()
 
     handlers = create_handlers(
         state=state,
         shell=shell,
         authorized_chat_id=settings.authorized_chat_id,
         command_timeout=settings.command_timeout,
+        audit_log=audit,
     )
 
     app = (

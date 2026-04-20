@@ -40,7 +40,7 @@ jobs:
         run: uv run pip-audit
 
       - name: Run tests with coverage
-        run: uv run pytest --cov --cov-report=xml --cov-report=term-missing
+        run: uv run pytest --cov --cov-report=xml --cov-report=term-missing --cov-fail-under=70
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'

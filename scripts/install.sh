@@ -66,6 +66,10 @@ if command -v uv &>/dev/null; then
     info "Dipendenze installate (uv sync)"
 else
     warn "uv non trovato — installazione automatica..."
+    warn "NOTA: per massima sicurezza, installa uv manualmente prima di eseguire lo script:"
+    warn "  curl -LsSf https://astral.sh/uv/install.sh | sh"
+    warn "Procedendo con installazione automatica in 5 secondi... (Ctrl+C per annullare)"
+    sleep 5
     curl -LsSf https://astral.sh/uv/install.sh -o /tmp/uv-install.sh
     chmod +x /tmp/uv-install.sh
     sh /tmp/uv-install.sh
