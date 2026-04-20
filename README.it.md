@@ -2,12 +2,12 @@
 
 > Controlla terminali remoti dal tuo smartphone via Telegram. Multi-PC, sessioni persistenti, zero infrastruttura.
 
-[![CI](https://github.com/bonn/telegram-terminal-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/bonn/telegram-terminal-bot/actions/workflows/ci.yml)
+[![CI](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![codecov](https://codecov.io/gh/bonn/telegram-terminal-bot/branch/main/graph/badge.svg)](https://codecov.io/gh/bonn/telegram-terminal-bot)
+[![codecov](https://codecov.io/gh/AndreaBonn/remote-terminal-bot/branch/main/graph/badge.svg)](https://codecov.io/gh/AndreaBonn/remote-terminal-bot)
 
-**[🇬🇧 Read in English](README.md)**
+**[🇬🇧 Read in English](README.md)** | **[📖 Manuale di Installazione](docs/manuale-installazione.md)** | **[🔒 Sicurezza](SECURITY.it.md)** | **[🤝 Contribuire](CONTRIBUTING.it.md)**
 
 ---
 
@@ -61,8 +61,8 @@ Ogni PC esegue lo stesso bot token. Solo il PC **attivo** esegue comandi. Gli al
 
 ```bash
 # Clona
-git clone https://github.com/bonn/telegram-terminal-bot.git
-cd telegram-terminal-bot
+git clone https://github.com/AndreaBonn/remote-terminal-bot.git
+cd remote-terminal-bot
 
 # Installa (raccomandato: uv)
 uv sync
@@ -179,6 +179,12 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
+## Supporta il Progetto
+
+Se trovi utile questo bot, lascia una stella su GitHub — aiuta altri a scoprire il progetto e motiva lo sviluppo futuro.
+
+[![Star on GitHub](https://img.shields.io/github/stars/AndreaBonn/remote-terminal-bot?style=social)](https://github.com/AndreaBonn/remote-terminal-bot)
+
 ## Licenza
 
-[MIT](LICENSE)
+[MIT](LICENSE) — Copyright (c) 2026 [Andrea Bonacci](https://github.com/AndreaBonn)

@@ -24,10 +24,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/bonn/telegram-terminal-bot"
-Repository = "https://github.com/bonn/telegram-terminal-bot"
-Changelog = "https://github.com/bonn/telegram-terminal-bot/blob/main/CHANGELOG.md"
-Issues = "https://github.com/bonn/telegram-terminal-bot/issues"
+Homepage = "https://github.com/AndreaBonn/remote-terminal-bot"
+Repository = "https://github.com/AndreaBonn/remote-terminal-bot"
+Issues = "https://github.com/AndreaBonn/remote-terminal-bot/issues"
 
 [project.scripts]
 telegram-terminal-bot = "src.bot:main"

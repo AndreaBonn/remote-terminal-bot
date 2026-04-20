@@ -1,12 +1,14 @@
 # Contributing
 
+**[🇮🇹 Leggi in italiano](CONTRIBUTING.it.md)**
+
 Contributions are welcome! Here's how to get started.
 
 ## Development Setup
 
 ```bash
-git clone https://github.com/bonn/telegram-terminal-bot.git
-cd telegram-terminal-bot
+git clone https://github.com/AndreaBonn/remote-terminal-bot.git
+cd remote-terminal-bot
 uv sync          # Install all dependencies including dev
 ```
 

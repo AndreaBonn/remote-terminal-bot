@@ -29,3 +29,6 @@ htmlcov/
 
 # Ruff
 .ruff_cache/
+
+# Project internal docs
+doc_progetto/
