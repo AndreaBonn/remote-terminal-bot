@@ -1,0 +1,23 @@
+[Unit]
+Description=Telegram Terminal Bot (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/telegram-terminal-bot
+ExecStart=/home/%i/telegram-terminal-bot/.venv/bin/python -m src.bot
+Restart=always
+RestartSec=10
+EnvironmentFile=/home/%i/telegram-terminal-bot/.env
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/%i/telegram-terminal-bot
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
