@@ -32,3 +32,6 @@ htmlcov/
 
 # Project internal docs
 doc_progetto/
+docs/*
+!docs/how-to-install.md
+!docs/manuale-installazione.md
