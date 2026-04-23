@@ -125,4 +125,7 @@ class StateManager:
             self.state_file.chmod(0o600)
         except OSError as err:
             logger.error("Failed to save state file: %s", err)
-            tmp_file.unlink(missing_ok=True)
+            try:
+                tmp_file.unlink(missing_ok=True)
+            except OSError:
+                pass
