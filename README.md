@@ -2,10 +2,17 @@
 
 > Control remote terminals from your smartphone via Telegram. Multi-PC, persistent sessions, zero infrastructure.
 
+<div align="center">
+
 [![CI](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AndreaBonn/remote-terminal-bot/main/badges/test-badge.json)](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/AndreaBonn/remote-terminal-bot/branch/main/graph/badge.svg)](https://codecov.io/gh/AndreaBonn/remote-terminal-bot)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![codecov](https://codecov.io/gh/AndreaBonn/remote-terminal-bot/branch/main/graph/badge.svg)](https://codecov.io/gh/AndreaBonn/remote-terminal-bot)
+[![Security Policy](https://img.shields.io/badge/security-policy-blueviolet.svg)](SECURITY.md)
+
+</div>
 
 **[🇮🇹 Leggi in italiano](README.it.md)** | **[📖 Installation Guide](docs/how-to-install.md)** | **[🔒 Security](SECURITY.md)** | **[🤝 Contributing](CONTRIBUTING.md)**
 
