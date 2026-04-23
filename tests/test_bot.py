@@ -279,3 +279,102 @@ class TestSendHeartbeat:
             await task
         except asyncio.CancelledError:
             pass
+
+
+class TestPostInitCancelsOldHeartbeat:
+    """post_init cancels pre-existing heartbeat task before creating new one."""
+
+    @pytest.mark.asyncio
+    async def test_cancels_running_heartbeat_task(self) -> None:
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+        )
+        mock_shell = MagicMock()
+        mock_shell.start = AsyncMock()
+        mock_state = MagicMock()
+
+        # Create a fake old heartbeat task that is still running
+        async def old_heartbeat() -> None:
+            await asyncio.sleep(999)
+
+        old_task = asyncio.create_task(old_heartbeat())
+
+        mock_app = MagicMock()
+        mock_app.bot_data = {
+            "settings": settings,
+            "shell": mock_shell,
+            "state": mock_state,
+            "heartbeat_task": old_task,
+        }
+        mock_app.bot.send_message = AsyncMock()
+
+        await post_init(mock_app)
+
+        # Old task should be cancelled
+        assert old_task.cancelled()
+        # New task should be created
+        new_task = mock_app.bot_data["heartbeat_task"]
+        assert new_task is not old_task
+        assert isinstance(new_task, asyncio.Task)
+        new_task.cancel()
+        try:
+            await new_task
+        except asyncio.CancelledError:
+            pass
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_disabled_skips_task_creation(self) -> None:
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+            heartbeat_enabled=False,
+        )
+        mock_shell = MagicMock()
+        mock_shell.start = AsyncMock()
+        mock_state = MagicMock()
+
+        mock_app = MagicMock()
+        mock_app.bot_data = {
+            "settings": settings,
+            "shell": mock_shell,
+            "state": mock_state,
+        }
+        mock_app.bot.send_message = AsyncMock()
+
+        await post_init(mock_app)
+
+        # No heartbeat_task should be created
+        assert "heartbeat_task" not in mock_app.bot_data
+
+
+class TestErrorHandler:
+    """Global error handler in build_application."""
+
+    @pytest.mark.asyncio
+    async def test_error_handler_logs_exception(self) -> None:
+        from src.bot import build_application
+
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+        )
+        app = build_application(settings=settings)
+
+        # The error handler is registered — verify it exists
+        assert len(app.error_handlers) > 0
+
+
+class TestMain:
+    """Main entry point tests."""
+
+    def test_main_missing_env_exits(self, tmp_path: Path, monkeypatch) -> None:
+        from src.bot import main
+
+        # Ensure no .env exists in cwd
+        monkeypatch.chdir(tmp_path)
+        with pytest.raises(SystemExit):
+            main()

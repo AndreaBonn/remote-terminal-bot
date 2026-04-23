@@ -133,8 +133,63 @@ class TestLoadSettings:
         with pytest.raises(ConfigurationError, match="must be an integer"):
             load_settings(env_path=env_file)
 
+    def test_heartbeat_disabled_skips_interval_validation(self) -> None:
+        settings = Settings(
+            bot_token="tok",
+            authorized_chat_id=1,
+            machine_name="pc",
+            heartbeat_enabled=False,
+            heartbeat_interval=0,
+        )
+        assert settings.heartbeat_enabled is False
+
+    def test_heartbeat_interval_zero_with_enabled_exits(self) -> None:
+        with pytest.raises(ConfigurationError, match="positive"):
+            Settings(
+                bot_token="tok",
+                authorized_chat_id=1,
+                machine_name="pc",
+                heartbeat_enabled=True,
+                heartbeat_interval=0,
+            )
+
+    def test_settings_repr_redacts_token(self) -> None:
+        settings = Settings(
+            bot_token="secret-token-123",
+            authorized_chat_id=1,
+            machine_name="pc",
+        )
+        r = repr(settings)
+        assert "secret-token-123" not in r
+        assert "REDACTED" in r
+        assert "pc" in r
+
+    def test_invalid_bool_env_raises(self, tmp_path: Path, monkeypatch) -> None:
+        for key in (
+            "TELEGRAM_BOT_TOKEN",
+            "AUTHORIZED_CHAT_ID",
+            "MACHINE_NAME",
+            "COMMAND_TIMEOUT",
+            "HEARTBEAT_ENABLED",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "TELEGRAM_BOT_TOKEN=tok\nAUTHORIZED_CHAT_ID=1\n"
+            "MACHINE_NAME=pc\nHEARTBEAT_ENABLED=maybe\n",
+        )
+        with pytest.raises(ConfigurationError, match="true/false"):
+            load_settings(env_path=env_file)
+
     def test_machine_name_normalized_to_lowercase(self, tmp_path: Path, monkeypatch) -> None:
-        for key in ("TELEGRAM_BOT_TOKEN", "AUTHORIZED_CHAT_ID", "MACHINE_NAME", "COMMAND_TIMEOUT"):
+        for key in (
+            "TELEGRAM_BOT_TOKEN",
+            "AUTHORIZED_CHAT_ID",
+            "MACHINE_NAME",
+            "COMMAND_TIMEOUT",
+            "HEARTBEAT_ENABLED",
+        ):
             monkeypatch.delenv(key, raising=False)
 
         env_file = tmp_path / ".env"

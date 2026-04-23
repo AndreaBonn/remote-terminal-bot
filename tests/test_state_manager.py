@@ -60,3 +60,22 @@ class TestStateManager:
         # Load in a new instance
         state2 = StateManager(machine_name="pc2", state_file=state_file)
         assert state2.active_pc == "desktop"
+
+    def test_corrupted_state_file_loads_gracefully(self, tmp_path) -> None:
+        state_file = tmp_path / "state.json"
+        state_file.write_text("NOT VALID JSON{{{", encoding="utf-8")
+        state = StateManager(machine_name="pc1", state_file=state_file)
+        assert state.active_pc == ""
+
+    def test_save_state_handles_write_failure(self, tmp_path) -> None:
+        state_dir = tmp_path / "readonly"
+        state_dir.mkdir()
+        state_file = state_dir / "state.json"
+        state = StateManager(machine_name="pc1", state_file=state_file)
+        # Make parent dir read-only so save fails
+        state_dir.chmod(0o444)
+        try:
+            # activate triggers save — should not raise despite permission error
+            state.activate("desktop")
+        finally:
+            state_dir.chmod(0o755)

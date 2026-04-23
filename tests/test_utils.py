@@ -62,6 +62,35 @@ class TestFormatOutput:
         assert "[1/" in result[0]
 
 
+class TestFormatPeerList:
+    """Peer list formatting for /list command."""
+
+    def test_empty_peer_list(self) -> None:
+        from src.utils import format_peer_list
+
+        result = format_peer_list([])
+        assert "Nessun PC online" in result
+
+    def test_peers_with_explicit_now(self) -> None:
+        from src.state_manager import PeerInfo
+        from src.utils import format_peer_list
+
+        peers = [PeerInfo(name="desktop", last_heartbeat=100.0)]
+        result = format_peer_list(peers, now=110.0)
+        assert "desktop" in result
+        assert "10s fa" in result
+
+    def test_peers_with_default_now(self) -> None:
+        import time
+
+        from src.state_manager import PeerInfo
+        from src.utils import format_peer_list
+
+        peers = [PeerInfo(name="laptop", last_heartbeat=time.time())]
+        result = format_peer_list(peers)
+        assert "laptop" in result
+
+
 class TestFormatTimeoutMessage:
     """Timeout message formatting."""
 

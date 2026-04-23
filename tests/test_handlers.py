@@ -290,3 +290,101 @@ class TestHeartbeat:
         # Should still register the heartbeat despite delete failure
         peer_names = [p.name for p in mock_state.get_online_peers()]
         assert "server" in peer_names
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_no_message_ignored(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message = None
+        await handlers["heartbeat"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_no_text_ignored(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message.text = None
+        await handlers["heartbeat"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_heartbeat_wrong_format_ignored(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_update.message.text = "__HB__notrailing"
+        mock_update.message.delete = AsyncMock()
+        await handlers["heartbeat"](mock_update, mock_context)
+        mock_update.message.delete.assert_not_called()
+
+
+class TestHandlerNullMessageGuards:
+    """Handlers return early when update.message is None."""
+
+    @pytest.mark.asyncio
+    async def test_activate_no_message(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message = None
+        await handlers["activate"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_list_no_message(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message = None
+        await handlers["list"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_status_no_message(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message = None
+        await handlers["status"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_cancel_no_message(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message = None
+        await handlers["cancel"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_help_no_message(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message = None
+        await handlers["help"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_shell_command_no_message(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message = None
+        await handlers["shell_command"](mock_update, mock_context)
+
+    @pytest.mark.asyncio
+    async def test_shell_command_no_text(self, handlers, mock_update, mock_context) -> None:
+        mock_update.message.text = None
+        await handlers["shell_command"](mock_update, mock_context)
+        mock_update.message.reply_text.assert_not_called()
+
+
+class TestCancelInactive:
+    """Cancel on inactive machine returns silently."""
+
+    @pytest.mark.asyncio
+    async def test_cancel_on_inactive_pc_ignored(
+        self, handlers, mock_update, mock_context, mock_state
+    ) -> None:
+        mock_state.activate("other-pc")
+        await handlers["cancel"](mock_update, mock_context)
+        mock_update.message.reply_text.assert_not_called()
+
+
+class TestShellCommandWithAuditLog:
+    """Shell command handler records to audit log."""
+
+    @pytest.mark.asyncio
+    async def test_audit_log_records_command(
+        self, mock_update, mock_context, mock_state, mock_shell
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        mock_audit = MagicMock()
+        handlers = create_handlers(
+            state=mock_state,
+            shell=mock_shell,
+            authorized_chat_id=12345,
+            command_timeout=30,
+            audit_log=mock_audit,
+        )
+        mock_state.activate("test-pc")
+        mock_shell.execute.return_value = CommandResult(output="ok", exit_code=0)
+
+        await handlers["shell_command"](mock_update, mock_context)
+
+        mock_audit.record.assert_called_once()
+        call_kwargs = mock_audit.record.call_args
+        assert call_kwargs[1]["command"] == "ls -la" or call_kwargs.kwargs["command"] == "ls -la"
