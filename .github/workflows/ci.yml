@@ -40,7 +40,7 @@ jobs:
         run: uv run pip-audit
 
       - name: Run tests with coverage
-        run: uv run pytest --cov --cov-report=xml --cov-report=term-missing --cov-fail-under=70 --junitxml=test-results.xml
+        run: uv run pytest --cov --cov-report=xml --cov-report=json --cov-report=term-missing --cov-fail-under=70 --junitxml=test-results.xml
 
       - name: Generate test badge
         if: always() && matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
@@ -64,11 +64,31 @@ jobs:
               json.dump(badge, f)
           "
 
-      - name: Commit badge
+      - name: Generate coverage badge
+        if: always() && matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p badges
+          python -c "
+          import json, os
+          path = 'coverage.json'
+          if not os.path.exists(path):
+              badge = {'schemaVersion': 1, 'label': 'coverage', 'message': 'N/A', 'color': 'lightgrey'}
+          else:
+              with open(path) as f:
+                  data = json.load(f)
+              pct = data['totals']['percent_covered_display']
+              pct_num = data['totals']['percent_covered']
+              color = 'brightgreen' if pct_num >= 90 else 'green' if pct_num >= 80 else 'yellow' if pct_num >= 60 else 'red'
+              badge = {'schemaVersion': 1, 'label': 'coverage', 'message': f'{pct}%', 'color': color}
+          with open('badges/coverage-badge.json', 'w') as f:
+              json.dump(badge, f)
+          "
+
+      - name: Commit badges
         if: always() && matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add badges/test-badge.json
-          git diff --cached --quiet || git commit -m "ci: update test badge [skip ci]"
+          git add badges/test-badge.json badges/coverage-badge.json
+          git diff --cached --quiet || git commit -m "ci: update badges [skip ci]"
           git push
