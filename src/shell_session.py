@@ -222,8 +222,12 @@ class ShellSession:
             return
 
         cwd_marker = _generate_marker()
-        self._process.stdin.write(f'echo "{cwd_marker}__CWD__$(pwd)"\n'.encode())
-        await self._process.stdin.drain()
+        try:
+            self._process.stdin.write(f'echo "{cwd_marker}__CWD__$(pwd)"\n'.encode())
+            await self._process.stdin.drain()
+        except (ConnectionResetError, BrokenPipeError):
+            logger.debug("Process died before cwd update, keeping previous: %s", self._cwd)
+            return
 
         try:
             while True:
