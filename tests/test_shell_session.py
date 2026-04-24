@@ -267,10 +267,26 @@ class TestShellSession:
             await session.shutdown()
 
     @pytest.mark.asyncio
-    async def test_exit_code_parse_error_defaults_to_one(self, shell: ShellSession) -> None:
-        """Invalid exit code in marker line defaults to 1."""
-        result = await shell.execute("exit 42")
-        assert isinstance(result.exit_code, int)
+    async def test_exit_code_parse_error_defaults_to_one(self) -> None:
+        """When marker line has non-numeric exit code, defaults to 1."""
+        from unittest.mock import AsyncMock, patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            marker = "__TEST_MARKER__"
+            # Simulate _read_output returning a marker with invalid exit code
+            mock_read = AsyncMock(
+                return_value=([f"{marker}INVALID"], []),
+            )
+            with (
+                patch.object(session, "_read_output", mock_read),
+                patch("src.shell_session._generate_marker", return_value=marker),
+            ):
+                result = await session._execute_locked("echo test")
+            assert result.exit_code == 1
+        finally:
+            await session.shutdown()
 
     @pytest.mark.asyncio
     async def test_update_cwd_timeout_keeps_previous_cwd(self) -> None:
@@ -350,3 +366,217 @@ class TestShellSession:
             assert any("TRUNCATED" in line for line in stdout)
         finally:
             await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_drain_loop_value_error_continues_until_marker(self) -> None:
+        """ValueError in drain loop is skipped; draining continues until marker."""
+        from unittest.mock import patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            marker = "__DRAIN_TEST__"
+            call_count = 0
+
+            async def mock_readline():
+                nonlocal call_count
+                call_count += 1
+                if call_count <= 600:
+                    # Fill up past _MAX_OUTPUT_BYTES to trigger truncation
+                    return b"x" * 1024 + b"\n"
+                if call_count == 601:
+                    # ValueError in drain loop — should continue
+                    raise ValueError("buffer overflow in drain")
+                if call_count == 602:
+                    # Return marker to end drain
+                    return f"{marker}0\n".encode()
+                return b""
+
+            with patch.object(session._process.stdout, "readline", side_effect=mock_readline):
+                stdout, stderr = await session._read_output(marker)
+            assert any("TRUNCATED" in line for line in stdout)
+        finally:
+            await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_drain_loop_empty_line_breaks(self) -> None:
+        """Empty readline in drain loop breaks out (EOF)."""
+        from unittest.mock import patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            marker = "__DRAIN_EOF__"
+            call_count = 0
+
+            async def mock_readline():
+                nonlocal call_count
+                call_count += 1
+                if call_count <= 600:
+                    return b"x" * 1024 + b"\n"
+                # EOF in drain — empty bytes
+                return b""
+
+            with patch.object(session._process.stdout, "readline", side_effect=mock_readline):
+                stdout, stderr = await session._read_output(marker)
+            assert any("TRUNCATED" in line for line in stdout)
+        finally:
+            await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_update_cwd_empty_readline_breaks(self) -> None:
+        """_update_cwd breaks when readline returns empty bytes (process died)."""
+        from unittest.mock import AsyncMock, patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            session._cwd = "/before"
+            with patch.object(
+                session._process.stdout,
+                "readline",
+                new_callable=AsyncMock,
+                return_value=b"",
+            ):
+                await session._update_cwd()
+            # cwd unchanged — EOF before marker found
+            assert session._cwd == "/before"
+        finally:
+            await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_shutdown_kills_process_after_wait_timeout(self) -> None:
+        """shutdown() calls kill() when process.wait() times out."""
+        import asyncio
+        from unittest.mock import MagicMock, PropertyMock, patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        assert session._process is not None
+
+        proc = session._process
+
+        # Make wait() always timeout
+        async def mock_wait():
+            await asyncio.sleep(999)
+
+        mock_kill = MagicMock()
+
+        with (
+            patch.object(proc, "wait", side_effect=mock_wait),
+            patch.object(proc, "kill", mock_kill),
+            patch.object(
+                type(proc),
+                "returncode",
+                new_callable=PropertyMock,
+                return_value=None,
+            ),
+        ):
+            await session.shutdown()
+            mock_kill.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_read_output_stdout_eof_before_marker(self) -> None:
+        """_read_output handles EOF on stdout (empty bytes before marker found)."""
+        from unittest.mock import AsyncMock, patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            with patch.object(
+                session._process.stdout,
+                "readline",
+                new_callable=AsyncMock,
+                return_value=b"",
+            ):
+                stdout, stderr = await session._read_output("__MARKER__")
+            # No marker found — empty result
+            assert stdout == []
+        finally:
+            await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_read_output_stderr_eof(self) -> None:
+        """_read_output handles EOF on stderr (empty bytes)."""
+        from unittest.mock import AsyncMock, patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            marker = "__STDERR_EOF__"
+
+            stdout_call = 0
+
+            async def mock_stdout_readline():
+                nonlocal stdout_call
+                stdout_call += 1
+                if stdout_call == 1:
+                    return f"{marker}0\n".encode()
+                return b""
+
+            with (
+                patch.object(
+                    session._process.stdout,
+                    "readline",
+                    side_effect=mock_stdout_readline,
+                ),
+                patch.object(
+                    session._process.stderr,
+                    "readline",
+                    new_callable=AsyncMock,
+                    return_value=b"",
+                ),
+            ):
+                stdout, stderr = await session._read_output(marker)
+            assert stderr == []
+        finally:
+            await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_update_cwd_connection_reset_keeps_previous_cwd(self) -> None:
+        """_update_cwd handles ConnectionResetError when process dies mid-write."""
+        from unittest.mock import AsyncMock, patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            session._cwd = "/stable"
+            with patch.object(
+                session._process.stdin,
+                "drain",
+                new_callable=AsyncMock,
+                side_effect=ConnectionResetError("Connection lost"),
+            ):
+                await session._update_cwd()
+            assert session._cwd == "/stable"
+        finally:
+            await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_update_cwd_broken_pipe_keeps_previous_cwd(self) -> None:
+        """_update_cwd handles BrokenPipeError when process dies mid-write."""
+        from unittest.mock import AsyncMock, patch
+
+        session = ShellSession(timeout=10)
+        await session.start()
+        try:
+            session._cwd = "/stable"
+            with patch.object(
+                session._process.stdin,
+                "drain",
+                new_callable=AsyncMock,
+                side_effect=BrokenPipeError("Broken pipe"),
+            ):
+                await session._update_cwd()
+            assert session._cwd == "/stable"
+        finally:
+            await session.shutdown()
+
+    @pytest.mark.asyncio
+    async def test_exit_command_preserves_cwd(self, shell: ShellSession) -> None:
+        """Running 'exit' doesn't crash — cwd is preserved despite dead process."""
+        shell._cwd = "/before-exit"
+        result = await shell.execute("exit 42")
+        assert isinstance(result.exit_code, int)
+        # cwd unchanged after process death
+        assert shell.cwd == "/before-exit"

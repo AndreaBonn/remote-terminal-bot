@@ -388,3 +388,39 @@ class TestShellCommandWithAuditLog:
         mock_audit.record.assert_called_once()
         call_kwargs = mock_audit.record.call_args
         assert call_kwargs[1]["command"] == "ls -la" or call_kwargs.kwargs["command"] == "ls -la"
+
+
+class TestRateLimitExpiry:
+    """Old timestamps are evicted from rate limit window."""
+
+    @pytest.mark.asyncio
+    async def test_expired_timestamps_are_evicted(
+        self, mock_update, mock_context, mock_state, mock_shell
+    ) -> None:
+        """Commands older than 60s are removed, allowing new commands through."""
+        import time
+        from unittest.mock import patch
+
+        handlers = create_handlers(
+            state=mock_state,
+            shell=mock_shell,
+            authorized_chat_id=12345,
+            command_timeout=30,
+        )
+        mock_state.activate("test-pc")
+        mock_shell.execute.return_value = CommandResult(output="ok", exit_code=0)
+
+        # Fill up rate limit with 30 commands at t=0
+        with patch.object(time, "monotonic", return_value=1000.0):
+            for _ in range(30):
+                mock_update.message.reply_text.reset_mock()
+                await handlers["shell_command"](mock_update, mock_context)
+
+        # At t=61 (past 60s window), old timestamps should be evicted
+        with patch.object(time, "monotonic", return_value=1061.0):
+            mock_update.message.reply_text.reset_mock()
+            await handlers["shell_command"](mock_update, mock_context)
+
+        # Should NOT be rate limited — old entries expired
+        reply = mock_update.message.reply_text.call_args[0][0]
+        assert "Rate limit" not in reply

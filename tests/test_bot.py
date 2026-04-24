@@ -367,6 +367,28 @@ class TestErrorHandler:
         # The error handler is registered — verify it exists
         assert len(app.error_handlers) > 0
 
+    @pytest.mark.asyncio
+    async def test_error_handler_invokes_logger(self, caplog) -> None:
+        """error_handler logs the exception via logger.error."""
+        from src.bot import build_application
+
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+        )
+        app = build_application(settings=settings)
+
+        # Extract the registered error handler
+        handler_fn = list(app.error_handlers.keys())[0]
+        mock_context = MagicMock()
+        mock_context.error = ValueError("test boom")
+
+        with caplog.at_level(logging.ERROR, logger="src.bot"):
+            await handler_fn(None, mock_context)
+
+        assert "test boom" in caplog.text
+
 
 class TestMain:
     """Main entry point tests."""
@@ -377,4 +399,49 @@ class TestMain:
         # Ensure no .env exists in cwd
         monkeypatch.chdir(tmp_path)
         with pytest.raises(SystemExit):
+            main()
+
+    def test_main_happy_path_calls_run_polling(self, monkeypatch) -> None:
+        """main() loads settings, builds app, and calls run_polling."""
+        from unittest.mock import patch
+
+        from src.bot import main
+
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+            log_level="DEBUG",
+        )
+        mock_app = MagicMock()
+
+        with (
+            patch("src.bot.load_settings", return_value=settings),
+            patch("src.bot.build_application", return_value=mock_app) as mock_build,
+        ):
+            main()
+
+        mock_build.assert_called_once_with(settings=settings)
+        mock_app.run_polling.assert_called_once_with(drop_pending_updates=True)
+
+    def test_main_build_failure_exits(self, monkeypatch) -> None:
+        """main() exits if build_application raises ConfigurationError."""
+        from unittest.mock import patch
+
+        from src.bot import main
+
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+        )
+
+        with (
+            patch("src.bot.load_settings", return_value=settings),
+            patch(
+                "src.bot.build_application",
+                side_effect=ConfigurationError("bad build"),
+            ),
+            pytest.raises(SystemExit),
+        ):
             main()

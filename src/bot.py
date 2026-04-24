@@ -268,5 +268,5 @@ def main() -> None:
     app.run_polling(drop_pending_updates=True)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":  # pragma: no cover
     main()

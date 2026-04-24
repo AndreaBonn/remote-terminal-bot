@@ -198,3 +198,23 @@ class TestLoadSettings:
         )
         settings = load_settings(env_path=env_file)
         assert settings.machine_name == "mydesktop"
+
+    def test_bool_env_false_values_parsed(self, tmp_path: Path, monkeypatch) -> None:
+        """_parse_bool_env returns False for 'false', 'no', '0'."""
+        for key in (
+            "TELEGRAM_BOT_TOKEN",
+            "AUTHORIZED_CHAT_ID",
+            "MACHINE_NAME",
+            "COMMAND_TIMEOUT",
+            "HEARTBEAT_ENABLED",
+        ):
+            monkeypatch.delenv(key, raising=False)
+
+        for false_val in ("false", "no", "0", "FALSE", "No"):
+            env_file = tmp_path / ".env"
+            env_file.write_text(
+                f"TELEGRAM_BOT_TOKEN=tok\nAUTHORIZED_CHAT_ID=1\n"
+                f"MACHINE_NAME=pc\nHEARTBEAT_ENABLED={false_val}\n",
+            )
+            settings = load_settings(env_path=env_file)
+            assert settings.heartbeat_enabled is False, f"Failed for '{false_val}'"

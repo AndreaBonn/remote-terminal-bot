@@ -104,7 +104,7 @@ def _parse_int_env(key: str, default: int) -> int:
         return int(raw)
     except ValueError:
         _fatal(f"{key} must be an integer, got: {raw!r}")
-        return default  # unreachable, satisfies type checker
+        return default  # pragma: no cover — unreachable, satisfies type checker
 
 
 def _parse_bool_env(key: str, *, default: bool) -> bool:
@@ -115,7 +115,7 @@ def _parse_bool_env(key: str, *, default: bool) -> bool:
     if raw in ("false", "no", "0"):
         return False
     _fatal(f"{key} must be true/false, got: {raw!r}")
-    return default  # unreachable, satisfies type checker
+    return default  # pragma: no cover — unreachable, satisfies type checker
 
 
 def _fatal(message: str) -> None:
