@@ -21,6 +21,7 @@ classifiers = [
 dependencies = [
     "python-telegram-bot>=20.7,<21.0",
     "python-dotenv>=1.0.0",
+    "urllib3>=2.7.0",
 ]
 
 [project.urls]
