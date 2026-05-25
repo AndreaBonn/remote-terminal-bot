@@ -61,6 +61,9 @@ def create_handlers(
         Mapping of handler names to async handler functions.
     """
 
+    # Bot-wide rate limit: a single deque is intentional because only one
+    # AUTHORIZED_CHAT_ID can submit commands. If the authorization model
+    # ever evolves to multi-user, this must become a per-chat dict.
     command_timestamps: deque[float] = deque()
 
     def _is_rate_limited() -> bool:
