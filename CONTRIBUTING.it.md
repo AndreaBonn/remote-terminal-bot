@@ -33,3 +33,23 @@ uv run mypy src/                       # Type check
 ## Tipi di Commit
 
 `feat` `fix` `chore` `docs` `refactor` `test` `perf` `ci`
+
+## Politica di Linting
+
+La configurazione ruff in `pyproject.toml` ignora due check di proposito:
+
+- **`S110`** (`try-except-pass`): il codice ha diversi percorsi di shutdown e
+  cleanup in cui ingoiare un'eccezione è il comportamento corretto — es.
+  attendere un `asyncio.Task` già cancellato di cui abbiamo richiesto la
+  cancellazione, o inviare la notifica "offline" durante lo shutdown quando la
+  rete potrebbe già non esserci. Abilitare S110 forzerebbe `# noqa` ovunque
+  senza alcun beneficio di sicurezza.
+- **`SIM105`** (`use-contextlib-suppress`): preferenza stilistica — un
+  `try/except/pass` esplicito si legge meglio di `with suppress(...)` in
+  handler già brevi.
+
+I test ignorano in più `S101` (assert), `S105`/`S106` (password/token hardcoded)
+e `S108` (path hardcoded a `/tmp`) perché pytest richiede tutti questi pattern.
+
+Se un futuro contributo introduce un'eccezione ingoiata che nasconde un bug
+reale, il fix corretto è loggare l'errore o rilanciare — non riabilitare S110.

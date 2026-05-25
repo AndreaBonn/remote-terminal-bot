@@ -33,3 +33,23 @@ uv run mypy src/                       # Type check
 ## Commit Types
 
 `feat` `fix` `chore` `docs` `refactor` `test` `perf` `ci`
+
+## Linting Policy
+
+The ruff configuration in `pyproject.toml` ignores two checks intentionally:
+
+- **`S110`** (`try-except-pass`): the codebase has several shutdown and cleanup
+  paths where swallowing an exception is the correct behavior — e.g. awaiting a
+  cancelled `asyncio.Task` that we already requested to cancel, or sending an
+  "offline" notification during shutdown when the network might already be gone.
+  Enabling S110 would force `# noqa` comments at every such site without any
+  safety benefit.
+- **`SIM105`** (`use-contextlib-suppress`): stylistic preference — explicit
+  `try/except/pass` reads more clearly than `with suppress(...)` in handlers
+  that are already short.
+
+Tests additionally ignore `S101` (asserts), `S105`/`S106` (hardcoded passwords),
+and `S108` (hardcoded `/tmp` paths) because pytest needs all of them.
+
+If a future contribution introduces a swallowed exception that hides a real
+bug, the right fix is to log the error or re-raise — not to re-enable S110.
