@@ -1,0 +1,44 @@
+version: 2
+updates:
+  # Python runtime + dev dependencies (resolved via uv.lock / pyproject.toml).
+  # dependabot understands "pip" ecosystem and reads pyproject.toml; uv.lock
+  # is regenerated locally by the maintainer after merge (`uv lock`).
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Rome
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - python
+    commit-message:
+      prefix: chore(deps)
+      include: scope
+    groups:
+      patch-updates:
+        update-types:
+          - patch
+      minor-updates:
+        update-types:
+          - minor
+
+  # GitHub Actions referenced by .github/workflows/*.yml. Project policy is
+  # to pin actions by commit SHA — dependabot will keep the SHA fresh while
+  # the inline `# vX.Y.Z` comment documents the human-readable version.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Rome
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: ci(deps)
+      include: scope
