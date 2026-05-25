@@ -2,6 +2,11 @@
 Description=Telegram Terminal Bot (%i)
 After=network-online.target
 Wants=network-online.target
+# StartLimitIntervalSec / StartLimitBurst belong to [Unit] since systemd
+# 230. Placement under [Service] still works but emits a deprecation
+# warning in journalctl on every start.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -10,8 +15,6 @@ WorkingDirectory=/home/%i/telegram-terminal-bot
 ExecStart=/home/%i/telegram-terminal-bot/.venv/bin/python -m src.bot
 Restart=always
 RestartSec=10
-StartLimitIntervalSec=300
-StartLimitBurst=5
 TimeoutStopSec=15
 EnvironmentFile=/home/%i/telegram-terminal-bot/.env
 
