@@ -8,22 +8,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- `docs/SECURITY.md` Threat Model section: trust boundary, shared-token
+- `SECURITY.md` Threat Model section: trust boundary, shared-token
   consequences across N PCs, manual token rotation procedure, out-of-scope
-  risks.
+  risks (bilingual EN + IT).
 - `CONTRIBUTING.md` Linting Policy section documenting why ruff `S110` and
-  `SIM105` are intentionally disabled.
+  `SIM105` are intentionally disabled (bilingual EN + IT).
+- `AUDIT_LOG_ENABLED` configuration flag (default `true`, fully back-compat)
+  to opt out of plaintext command logging to
+  `~/.local/share/telegram-terminal-bot/audit.jsonl`. New env var documented
+  in `.env.example`.
+- `SECURITY.md` "Audit Log — Disclosure" section describing log format,
+  permissions, retention, the in-the-clear secrets warning, and compliance
+  guidance for GDPR / HIPAA / SOC 2 / PCI environments (bilingual EN + IT).
 
 ### Changed
 - `README.md` "Why not Docker?" rewritten to address the privileged-container
   counter-argument and frame the choice as fit-for-purpose rather than
   container-escape avoidance.
+- CI coverage gate raised from `--cov-fail-under=70` to `--cov-fail-under=100`
+  to match `[tool.coverage.report] fail_under = 100` already enforced
+  locally; `CONTRIBUTING.md` reworded to describe the actual 100% contract
+  (bilingual EN + IT).
 
 ### Fixed
 - `src/bot.py`: removed stale `# noqa: F401` on `import re` — `re.escape()`
   is used explicitly in `filters.Regex`.
 - `src/bot.py`: hoisted `AuditLog` import to module top; the previous
   function-local import had no documented cycle-avoidance reason.
+- `src/state_manager.py`: `_default_state_path()` is now pure. The
+  filesystem `mkdir` previously executed inside the `default_factory`
+  is now performed lazily inside `_save_state()`, so constructing a
+  `StateManager` (e.g. in tests of `build_application`) no longer creates
+  `~/.local/share/telegram-terminal-bot/` on the user's home directory.
+- `tests/test_shell_session.py`: closed the un-awaited `Process.wait()`
+  coroutine in the `wait_for` mock used by the shutdown-timeout test,
+  eliminating `RuntimeWarning: coroutine 'Process.wait' was never awaited`.
+  The full suite now passes under `pytest -W error::RuntimeWarning`.
+
+### Security
+- Bumped `idna` 3.11 → 3.16, `urllib3` 2.6.3 → 2.7.0, `pip` 26.0.1 → 26.1.1
+  via `uv lock --upgrade-package`. Closes 5 known CVEs reported by
+  `pip-audit`:
+  - CVE-2026-45409 (`idna`): encode DoS on crafted inputs.
+  - PYSEC-2026-141 (`urllib3`): cross-origin redirect leaks sensitive headers.
+  - PYSEC-2026-142 (`urllib3`): Brotli decompression resource exhaustion.
+  - CVE-2026-3219 (`pip`): confused tar/ZIP archive handling.
+  - CVE-2026-6357 (`pip`): self-update check after wheel install.
+- CI `pip-audit` step now runs with `--strict` and an inline policy
+  comment forbidding silent bypass via `|| true` or unannotated ignore
+  lists. The next published CVE in a transitive dependency will turn the
+  build red — by design.
 
 ### Internal
 - `src/shell_session.py`: documented the 100 ms per-line stderr-drain timeout.
