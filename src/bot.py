@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re  # noqa: F401 — used at runtime in filters.Regex
+import re
 import signal
 import sys
 from pathlib import Path
