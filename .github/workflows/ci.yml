@@ -37,7 +37,12 @@ jobs:
         run: uv run mypy src/
 
       - name: Security audit
-        run: uv run pip-audit
+        # pip-audit exits non-zero on any known vulnerability (default behavior);
+        # --strict additionally fails the run if dependency metadata cannot be
+        # collected, so transient registry issues cannot silently produce a
+        # green build with unknown coverage. Do not add `|| true` or ignore
+        # lists without a CVE reference and a remediation deadline.
+        run: uv run pip-audit --strict
 
       - name: Run tests with coverage
         run: uv run pytest --cov --cov-report=xml --cov-report=term-missing --cov-fail-under=70
