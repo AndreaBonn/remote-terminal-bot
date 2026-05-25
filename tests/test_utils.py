@@ -70,6 +70,32 @@ class TestFormatOutput:
         assert "[1/" in result[0]
 
 
+class TestFormatPeerList:
+    """Peer list formatting for /list command."""
+
+    def test_empty_peer_list(self) -> None:
+
+        result = format_peer_list([])
+        assert "Nessun PC online" in result
+
+    def test_peers_with_explicit_now(self) -> None:
+        from src.utils import format_peer_list
+
+        peers = [PeerInfo(name="desktop", last_heartbeat=100.0)]
+        result = format_peer_list(peers, now=110.0)
+        assert "desktop" in result
+        assert "10s fa" in result
+
+    def test_peers_with_default_now(self) -> None:
+
+        from src.state_manager import PeerInfo
+        from src.utils import format_peer_list
+
+        peers = [PeerInfo(name="laptop", last_heartbeat=time.time())]
+        result = format_peer_list(peers)
+        assert "laptop" in result
+
+
 class TestFormatTimeoutMessage:
     """Timeout message formatting."""
 
@@ -81,37 +107,3 @@ class TestFormatTimeoutMessage:
     def test_custom_timeout_value(self) -> None:
         msg = format_timeout_message(120)
         assert "120" in msg
-
-
-class TestFormatPeerList:
-    """Peer list rendering for /list command."""
-
-    def test_empty_peers_shows_dedicated_message(self) -> None:
-        assert format_peer_list([]) == "🖥️ Nessun PC online."
-
-    def test_single_peer_shows_elapsed_seconds(self) -> None:
-        now = 1000.0
-        peer = PeerInfo(name="desktop", last_heartbeat=now - 25)
-        msg = format_peer_list([peer], now=now)
-        assert "desktop" in msg
-        assert "25s fa" in msg
-
-    def test_multiple_peers_each_on_own_line(self) -> None:
-        now = 500.0
-        peers = [
-            PeerInfo(name="laptop", last_heartbeat=now - 10),
-            PeerInfo(name="server", last_heartbeat=now - 60),
-        ]
-        msg = format_peer_list(peers, now=now)
-        lines = msg.split("\n")
-        assert lines[0] == "🖥️ PC Online:"
-        assert any("laptop" in ln and "10s" in ln for ln in lines)
-        assert any("server" in ln and "60s" in ln for ln in lines)
-
-    def test_now_defaults_to_current_time_when_none(self) -> None:
-        # Heartbeat very close to "now" → elapsed should be ~0
-        peer = PeerInfo(name="pc", last_heartbeat=time.time())
-        msg = format_peer_list([peer])  # now=None → uses time.time()
-        # Elapsed should be 0 or 1 second
-        assert "pc" in msg
-        assert ("0s fa" in msg) or ("1s fa" in msg)

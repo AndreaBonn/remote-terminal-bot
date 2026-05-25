@@ -19,25 +19,52 @@ SSH dal telefono è scomodo. Le VPN richiedono infrastruttura. Questo bot ti dà
 
 ## Architettura
 
-```
-┌─────────────┐     ┌─────────────┐
-│ Tu (telefono)────▶│ Telegram API │
-└─────────────┘     └──────┬──────┘
-                           │ long polling
-              ┌────────────┼────────────┐
-              ▼            ▼            ▼
-        ┌──────────┐ ┌──────────┐ ┌──────────┐
-        │ Bot PC-1 │ │ Bot PC-2 │ │ Bot PC-N │
-        │ (attivo) │ │ (standby)│ │ (standby)│
-        └────┬─────┘ └──────────┘ └──────────┘
-             │
-        ┌────▼─────┐
-        │  bash    │  ← sessione persistente
-        │ subprocess│    (mantiene cwd, env)
-        └──────────┘
+```mermaid
+%%{init: {'theme': 'default'}}%%
+graph LR
+    user["Tu (telefono)"]
+    tg_api["Telegram API"]
+
+    subgraph active_bot["Bot Attivo (PC-1)"]
+        direction TB
+        handlers["Handlers"]
+        shell["ShellSession"]
+        state_mgr["StateManager"]
+        audit["AuditLog"]
+        config["Config (.env)"]
+    end
+
+    subgraph standby["Bot in Standby"]
+        direction TB
+        pc2["Bot PC-2"]
+        pcn["Bot PC-N"]
+    end
+
+    bash_proc["subprocess bash"]
+
+    user -->|comandi| tg_api
+    tg_api -->|long polling| handlers
+    tg_api -.->|heartbeat| pc2
+    tg_api -.->|heartbeat| pcn
+    handlers --> shell
+    handlers --> state_mgr
+    handlers --> audit
+    shell --> bash_proc
+    config -.-> handlers
+
+    classDef core fill:#2563eb,stroke:#1d4ed8,color:#fff
+    classDef data fill:#d97706,stroke:#b45309,color:#fff
+    classDef ext fill:#6b7280,stroke:#4b5563,color:#fff
+    classDef engine fill:#059669,stroke:#047857,color:#fff
+
+    class user,tg_api ext
+    class handlers,shell core
+    class state_mgr,audit,config data
+    class bash_proc engine
+    class pc2,pcn ext
 ```
 
-Ogni PC esegue lo stesso bot token. Solo il PC **attivo** esegue comandi. Gli altri ascoltano silenziosamente e tracciano gli heartbeat per sapere chi è online.
+Ogni PC esegue lo stesso bot token. Solo il PC **attivo** esegue comandi. Gli altri ascoltano silenziosamente e tracciano gli heartbeat per sapere chi è online. Vedi la [documentazione architetturale](docs/ARCHITECTURE.md) per sequence diagram e state machine dettagliati.
 
 ## Funzionalità
 

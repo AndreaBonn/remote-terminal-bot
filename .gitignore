@@ -24,6 +24,7 @@ Thumbs.db
 
 # Testing
 .coverage
+coverage.json
 htmlcov/
 .pytest_cache/
 

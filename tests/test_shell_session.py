@@ -204,6 +204,28 @@ class TestShellSessionLifecycle:
         finally:
             await session.shutdown()
 
+    @pytest.mark.asyncio
+    async def test_update_cwd_handles_broken_pipe_on_process_death(self) -> None:
+        """If the bash process dies before _update_cwd writes its probe,
+        the BrokenPipeError raised by stdin.write must be caught and the
+        previous cwd preserved instead of crashing the await chain."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        session = ShellSession(timeout=5)
+        session._lock = __import__("asyncio").Lock()
+
+        proc = MagicMock()
+        proc.returncode = None  # _is_alive() → True
+        proc.stdin = MagicMock()
+        proc.stdin.write = MagicMock(side_effect=BrokenPipeError("pipe closed"))
+        proc.stdin.drain = AsyncMock()
+        proc.stdout = MagicMock()
+        session._process = proc
+
+        session._cwd = "/previous"
+        await session._update_cwd()
+        assert session._cwd == "/previous"  # unchanged
+
 
 class TestExitCodeParsing:
     """The marker line carries exit code from each command."""

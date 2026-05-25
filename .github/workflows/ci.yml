@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 permissions:
-  contents: read
+  contents: write   # required by the "Commit badges" step below
 
 jobs:
   lint-and-test:
@@ -48,7 +48,9 @@ jobs:
         # Coverage gate aligned with [tool.coverage.report] fail_under = 100
         # in pyproject.toml. The project ships at 100% line + branch coverage
         # and that is the contract advertised in README/SECURITY — CI enforces it.
-        run: uv run pytest --cov --cov-report=xml --cov-report=term-missing --cov-fail-under=100
+        # --cov-report=json + --junitxml are consumed by the badge generators
+        # below; do not remove them.
+        run: uv run pytest --cov --cov-report=xml --cov-report=json --cov-report=term-missing --cov-fail-under=100 --junitxml=test-results.xml
 
       - name: Upload coverage
         if: matrix.python-version == '3.12'
@@ -60,3 +62,54 @@ jobs:
         with:
           file: coverage.xml
           fail_ci_if_error: false
+
+      - name: Generate test badge
+        if: always() && matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p badges
+          python -c "
+          import json, xml.etree.ElementTree as ET
+          root = ET.parse('test-results.xml').getroot()
+          suites = root.findall('testsuite') if root.tag == 'testsuites' else [root]
+          tests = sum(int(s.attrib.get('tests', 0)) for s in suites)
+          failures = sum(int(s.attrib.get('failures', 0)) for s in suites)
+          errors = sum(int(s.attrib.get('errors', 0)) for s in suites)
+          passed = tests - failures - errors
+          badge = {
+              'schemaVersion': 1,
+              'label': 'tests',
+              'message': f'{passed}/{tests} passed' if failures + errors > 0 else f'{passed} passed',
+              'color': 'red' if failures + errors > 0 else 'brightgreen'
+          }
+          with open('badges/test-badge.json', 'w') as f:
+              json.dump(badge, f)
+          "
+
+      - name: Generate coverage badge
+        if: always() && matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p badges
+          python -c "
+          import json, os
+          path = 'coverage.json'
+          if not os.path.exists(path):
+              badge = {'schemaVersion': 1, 'label': 'coverage', 'message': 'N/A', 'color': 'lightgrey'}
+          else:
+              with open(path) as f:
+                  data = json.load(f)
+              pct = data['totals']['percent_covered_display']
+              pct_num = data['totals']['percent_covered']
+              color = 'brightgreen' if pct_num >= 90 else 'green' if pct_num >= 80 else 'yellow' if pct_num >= 60 else 'red'
+              badge = {'schemaVersion': 1, 'label': 'coverage', 'message': f'{pct}%', 'color': color}
+          with open('badges/coverage-badge.json', 'w') as f:
+              json.dump(badge, f)
+          "
+
+      - name: Commit badges
+        if: always() && matrix.python-version == '3.12' && github.ref == 'refs/heads/main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add badges/test-badge.json badges/coverage-badge.json
+          git diff --cached --quiet || git commit -m "ci: update badges [skip ci]"
+          git push

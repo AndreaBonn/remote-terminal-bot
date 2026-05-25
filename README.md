@@ -2,10 +2,17 @@
 
 > Control remote terminals from your smartphone via Telegram. Multi-PC, persistent sessions, zero infrastructure.
 
+<div align="center">
+
 [![CI](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml)
+[![Tests](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AndreaBonn/remote-terminal-bot/main/badges/test-badge.json)](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/AndreaBonn/remote-terminal-bot/main/badges/coverage-badge.json)](https://github.com/AndreaBonn/remote-terminal-bot/actions/workflows/ci.yml)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![codecov](https://codecov.io/gh/AndreaBonn/remote-terminal-bot/branch/main/graph/badge.svg)](https://codecov.io/gh/AndreaBonn/remote-terminal-bot)
+[![Security Policy](https://img.shields.io/badge/security-policy-blueviolet.svg)](SECURITY.md)
+
+</div>
 
 **[🇮🇹 Leggi in italiano](README.it.md)** | **[📖 Installation Guide](docs/how-to-install.md)** | **[🔒 Security](SECURITY.md)** | **[🤝 Contributing](CONTRIBUTING.md)**
 
@@ -20,15 +27,51 @@ SSH from your phone is painful. VPNs require infrastructure. This bot gives you 
 ## Architecture
 
 ```mermaid
-graph TD
-    Phone["You (phone)"] -->|commands| TG["Telegram API"]
-    TG -->|long polling| PC1["Bot PC-1<br/>(active)"]
-    TG -->|long polling| PC2["Bot PC-2<br/>(standby)"]
-    TG -->|long polling| PCN["Bot PC-N<br/>(standby)"]
-    PC1 --> Shell["bash subprocess<br/>(persistent session)"]
+%%{init: {'theme': 'default'}}%%
+graph LR
+    user["You (phone)"]
+    tg_api["Telegram API"]
+
+    subgraph active_bot["Active Bot (PC-1)"]
+        direction TB
+        handlers["Handlers"]
+        shell["ShellSession"]
+        state_mgr["StateManager"]
+        audit["AuditLog"]
+        config["Config (.env)"]
+    end
+
+    subgraph standby["Standby Bots"]
+        direction TB
+        pc2["Bot PC-2"]
+        pcn["Bot PC-N"]
+    end
+
+    bash_proc["bash subprocess"]
+
+    user -->|commands| tg_api
+    tg_api -->|long polling| handlers
+    tg_api -.->|heartbeat| pc2
+    tg_api -.->|heartbeat| pcn
+    handlers --> shell
+    handlers --> state_mgr
+    handlers --> audit
+    shell --> bash_proc
+    config -.-> handlers
+
+    classDef core fill:#2563eb,stroke:#1d4ed8,color:#fff
+    classDef data fill:#d97706,stroke:#b45309,color:#fff
+    classDef ext fill:#6b7280,stroke:#4b5563,color:#fff
+    classDef engine fill:#059669,stroke:#047857,color:#fff
+
+    class user,tg_api ext
+    class handlers,shell core
+    class state_mgr,audit,config data
+    class bash_proc engine
+    class pc2,pcn ext
 ```
 
-Each PC runs the same bot token. Only the **active** PC executes commands. Others listen silently and track heartbeats to know who's online.
+Each PC runs the same bot token. Only the **active** PC executes commands. Others listen silently and track heartbeats to know who's online. See [Architecture docs](docs/ARCHITECTURE.md) for detailed sequence diagrams and state machines.
 
 ## Features
 

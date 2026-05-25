@@ -104,3 +104,25 @@ class TestStateManager:
 
         assert any("Failed to save state file" in r.message for r in caplog.records)
         assert state.active_pc == "desktop"  # In-memory state still updated
+
+    def test_save_state_handles_unlink_oserror_during_cleanup(
+        self, tmp_path, caplog, monkeypatch
+    ) -> None:
+        """If the temp file cleanup itself raises OSError, _save_state must swallow it."""
+        state = StateManager(machine_name="pc1", state_file=tmp_path / "state.json")
+
+        def _raise_write(*_args, **_kwargs):
+            raise OSError("disk full during write")
+
+        def _raise_unlink(*_args, **_kwargs):
+            raise OSError("permission denied during cleanup")
+
+        # The primary write fails AND the cleanup unlink also fails — the outer
+        # try/except OSError around unlink must prevent the cleanup error from
+        # propagating and masking the original failure log.
+        monkeypatch.setattr("pathlib.Path.write_text", _raise_write)
+        monkeypatch.setattr("pathlib.Path.unlink", _raise_unlink)
+        state.activate("desktop")  # Triggers _save_state
+
+        assert any("Failed to save state file" in r.message for r in caplog.records)
+        assert state.active_pc == "desktop"
