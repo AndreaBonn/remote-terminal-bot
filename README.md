@@ -155,7 +155,11 @@ systemd/                # Service template for multi-user deployment
 
 ## Why not Docker?
 
-The bot's purpose is to control the **host system** — running it in a container would defeat the entire point. The shell session needs access to the host filesystem, processes, and network. systemd provides better security hardening (ProtectSystem, CapabilityBoundingSet, SystemCallFilter) than Docker for this use case, without the container escape risk surface.
+It is technically possible to run the bot in a container with `--pid=host`, `--network=host`, and the host filesystem bind-mounted — but at that point the container provides almost no isolation while adding an extra runtime to install, secure, and update.
+
+The actual reason this project chose `systemd` over Docker is fit-for-purpose: the kernel-level hardening directives used here (`ProtectSystem=strict`, `CapabilityBoundingSet=`, `SystemCallFilter=@system-service`, `RestrictNamespaces=true`) give a tighter, narrower sandbox than a permissive container needs to be in order to still do its job. systemd is also already present on every target host, so there is zero added attack surface from the orchestration layer itself.
+
+Containers would be the right call if the bot had to be deployable across heterogeneous hosts or scheduled by an orchestrator. Neither is the case here.
 
 ## Development
 
