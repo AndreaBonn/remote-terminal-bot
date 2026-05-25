@@ -15,6 +15,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   log `ERROR` on every `/activate` without persisting `state.json`. Both
   failures only surfaced under the systemd deployment path advertised in
   README — not in `uv run python -m src.bot` direct runs.
+- `scripts/install.sh`: replaced four U+FFFD replacement-character bytes
+  in the banner with clean U+2550 box-drawing rules. The diamonds were
+  visible on first run of the installer.
+- `scripts/install.sh`: interactive confirmation now required before
+  `rsync --delete` overwrites an existing `$INSTALL_DIR/src/` — local
+  edits between releases are no longer silently nuked.
 
 ### Added
 - `AUDIT_REDACT_SECRETS` (default `false`) opt-in flag that enables a
@@ -24,6 +30,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Best-effort only — see `SECURITY.md § Audit Log` for the explicit
   non-guarantees and the recommended `AUDIT_LOG_ENABLED=false`
   alternative for strict compliance use cases.
+- `.github/dependabot.yml`: weekly grouped updates for `pip`
+  (uv.lock / pyproject.toml) and `github-actions`, Monday 06:00
+  Europe/Rome, PR limit 5 per ecosystem. Pairs with the existing
+  reactive `pip-audit --strict` CI step.
+
+### Changed
+- `pyproject.toml`: classifier bumped from `Development Status :: 4 - Beta`
+  to `Development Status :: 5 - Production/Stable` to match the 1.0.0
+  release contract.
+- `.github/workflows/ci.yml`: `codecov/codecov-action` re-pinned by
+  commit SHA (`aa56896…`, v5.5.4) replacing the mutable `@v5` tag,
+  aligning reality with the "actions pinned by SHA" policy advertised
+  in `[1.0.0]`.
+- `systemd/telegram-terminal-bot@.service`: `StartLimitIntervalSec` and
+  `StartLimitBurst` moved from `[Service]` to `[Unit]` — their original
+  placement is deprecated since systemd 230 and emitted a journalctl
+  warning on every start.
 - `SECURITY.md` Threat Model section: trust boundary, shared-token
   consequences across N PCs, manual token rotation procedure, out-of-scope
   risks (bilingual EN + IT).
