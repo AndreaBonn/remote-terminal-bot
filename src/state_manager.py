@@ -15,11 +15,14 @@ _APP_NAME = "telegram-terminal-bot"
 
 
 def _default_state_path() -> Path:
-    """Return XDG-compliant state file path."""
+    """Return XDG-compliant state file path.
+
+    Pure: does not create the parent directory. The directory is created
+    lazily in ``_save_state`` so that simply constructing a StateManager
+    (e.g. in tests) does not write to the user's filesystem.
+    """
     data_home = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
-    app_dir = data_home / _APP_NAME
-    app_dir.mkdir(parents=True, exist_ok=True)
-    return app_dir / "state.json"
+    return data_home / _APP_NAME / "state.json"
 
 
 @dataclass
@@ -120,6 +123,7 @@ class StateManager:
         }
         tmp_file = self.state_file.with_suffix(".tmp")
         try:
+            self.state_file.parent.mkdir(parents=True, exist_ok=True)
             tmp_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
             tmp_file.replace(self.state_file)
             self.state_file.chmod(0o600)
