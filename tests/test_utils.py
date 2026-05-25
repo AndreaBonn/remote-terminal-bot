@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from src.utils import format_output, format_timeout_message, split_text
+import time
+
+from src.state_manager import PeerInfo
+from src.utils import format_output, format_peer_list, format_timeout_message, split_text
 
 
 class TestSplitText:
@@ -11,12 +14,17 @@ class TestSplitText:
     def test_short_text_returns_single_chunk(self) -> None:
         assert split_text("hello", max_length=100) == ["hello"]
 
-    def test_splits_at_line_boundaries(self) -> None:
+    def test_splits_at_line_boundaries_preserves_content(self) -> None:
         text = "line1\nline2\nline3\nline4"
         chunks = split_text(text, max_length=12)
+        # Every chunk fits within the limit
         assert all(len(c) <= 12 for c in chunks)
-        # All content preserved
-        assert "\n".join(chunks) == text or set("".join(chunks)) == set(text.replace("\n", ""))
+        # Content is preserved exactly (joined back with newlines)
+        assert "\n".join(chunks) == text
+        # Each chunk contains complete lines (no mid-line split)
+        for chunk in chunks:
+            assert not chunk.startswith("\n")
+            assert not chunk.endswith("\n")
 
     def test_long_single_line_force_splits(self) -> None:
         text = "a" * 100
@@ -73,3 +81,37 @@ class TestFormatTimeoutMessage:
     def test_custom_timeout_value(self) -> None:
         msg = format_timeout_message(120)
         assert "120" in msg
+
+
+class TestFormatPeerList:
+    """Peer list rendering for /list command."""
+
+    def test_empty_peers_shows_dedicated_message(self) -> None:
+        assert format_peer_list([]) == "🖥️ Nessun PC online."
+
+    def test_single_peer_shows_elapsed_seconds(self) -> None:
+        now = 1000.0
+        peer = PeerInfo(name="desktop", last_heartbeat=now - 25)
+        msg = format_peer_list([peer], now=now)
+        assert "desktop" in msg
+        assert "25s fa" in msg
+
+    def test_multiple_peers_each_on_own_line(self) -> None:
+        now = 500.0
+        peers = [
+            PeerInfo(name="laptop", last_heartbeat=now - 10),
+            PeerInfo(name="server", last_heartbeat=now - 60),
+        ]
+        msg = format_peer_list(peers, now=now)
+        lines = msg.split("\n")
+        assert lines[0] == "🖥️ PC Online:"
+        assert any("laptop" in ln and "10s" in ln for ln in lines)
+        assert any("server" in ln and "60s" in ln for ln in lines)
+
+    def test_now_defaults_to_current_time_when_none(self) -> None:
+        # Heartbeat very close to "now" → elapsed should be ~0
+        peer = PeerInfo(name="pc", last_heartbeat=time.time())
+        msg = format_peer_list([peer])  # now=None → uses time.time()
+        # Elapsed should be 0 or 1 second
+        assert "pc" in msg
+        assert ("0s fa" in msg) or ("1s fa" in msg)

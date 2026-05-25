@@ -60,3 +60,47 @@ class TestStateManager:
         # Load in a new instance
         state2 = StateManager(machine_name="pc2", state_file=state_file)
         assert state2.active_pc == "desktop"
+
+    def test_existing_peer_heartbeat_updates_only_timestamp(self, tmp_path) -> None:
+        state = StateManager(machine_name="pc1", state_file=tmp_path / "state.json")
+        state.register_heartbeat("peer-a")
+        first_ts = state._peers["peer-a"].last_heartbeat
+
+        time.sleep(0.01)
+        state.register_heartbeat("peer-a")
+        second_ts = state._peers["peer-a"].last_heartbeat
+
+        assert second_ts > first_ts
+        assert len(state._peers) == 2  # self + peer-a, no duplicate created
+
+    def test_load_state_handles_corrupt_json(self, tmp_path, caplog) -> None:
+        state_file = tmp_path / "state.json"
+        state_file.write_text("{not valid json", encoding="utf-8")
+
+        # Must not raise; active_pc stays empty
+        state = StateManager(machine_name="pc1", state_file=state_file)
+        assert state.active_pc == ""
+        assert any("Failed to load state file" in r.message for r in caplog.records)
+
+    def test_load_state_handles_unreadable_file(self, tmp_path, caplog) -> None:
+        state_file = tmp_path / "state.json"
+        state_file.write_text('{"active_pc": "desktop"}', encoding="utf-8")
+        state_file.chmod(0o000)
+        try:
+            state = StateManager(machine_name="pc1", state_file=state_file)
+            assert state.active_pc == ""
+        finally:
+            state_file.chmod(0o600)
+
+    def test_save_state_handles_oserror(self, tmp_path, caplog, monkeypatch) -> None:
+        state = StateManager(machine_name="pc1", state_file=tmp_path / "state.json")
+
+        def _raise(*_args, **_kwargs):
+            raise OSError("disk full")
+
+        # Patch the tmp file write to fail
+        monkeypatch.setattr("pathlib.Path.write_text", _raise)
+        state.activate("desktop")  # Triggers _save_state
+
+        assert any("Failed to save state file" in r.message for r in caplog.records)
+        assert state.active_pc == "desktop"  # In-memory state still updated

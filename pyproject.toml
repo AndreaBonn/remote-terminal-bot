@@ -58,7 +58,10 @@ omit = ["src/__main__.py"]
 [tool.coverage.report]
 show_missing = true
 skip_empty = true
-fail_under = 70
+fail_under = 100
+exclude_also = [
+    "if __name__ == .__main__.:",
+]
 
 [dependency-groups]
 dev = [

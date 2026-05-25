@@ -279,3 +279,171 @@ class TestSendHeartbeat:
             await task
         except asyncio.CancelledError:
             pass
+
+
+class TestPostInitHeartbeatDisabled:
+    """When heartbeat_enabled=False, no task is created."""
+
+    @pytest.mark.asyncio
+    async def test_post_init_skips_heartbeat_task_when_disabled(self) -> None:
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+            heartbeat_enabled=False,
+        )
+        mock_shell = MagicMock()
+        mock_shell.start = AsyncMock()
+        mock_state = MagicMock()
+
+        mock_app = MagicMock()
+        mock_app.bot_data = {
+            "settings": settings,
+            "shell": mock_shell,
+            "state": mock_state,
+        }
+        mock_app.bot.send_message = AsyncMock()
+
+        await post_init(mock_app)
+
+        # No heartbeat task should have been registered
+        assert "heartbeat_task" not in mock_app.bot_data
+
+    @pytest.mark.asyncio
+    async def test_post_init_cancels_pre_existing_heartbeat_task(self) -> None:
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+            heartbeat_enabled=True,
+        )
+        mock_shell = MagicMock()
+        mock_shell.start = AsyncMock()
+        mock_state = MagicMock()
+
+        async def _long_sleep():
+            await asyncio.sleep(999)
+
+        stale_task = asyncio.create_task(_long_sleep())
+
+        mock_app = MagicMock()
+        mock_app.bot_data = {
+            "settings": settings,
+            "shell": mock_shell,
+            "state": mock_state,
+            "heartbeat_task": stale_task,
+        }
+        mock_app.bot.send_message = AsyncMock()
+
+        await post_init(mock_app)
+
+        # Stale task must be cancelled, new one started
+        assert stale_task.cancelled()
+        new_task = mock_app.bot_data["heartbeat_task"]
+        assert new_task is not stale_task
+        # Cleanup
+        new_task.cancel()
+        try:
+            await new_task
+        except asyncio.CancelledError:
+            pass
+
+
+class TestBuildApplicationErrorHandler:
+    """The global error_handler must log unhandled exceptions."""
+
+    def test_error_handler_is_registered(self) -> None:
+        from src.bot import build_application
+
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+        )
+        app = build_application(settings=settings)
+        # ApplicationBuilder registers error handlers in error_handlers list
+        assert len(app.error_handlers) > 0
+
+    @pytest.mark.asyncio
+    async def test_error_handler_logs_unhandled_exception(self, caplog) -> None:
+        from src.bot import build_application
+
+        settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="test-pc",
+        )
+        app = build_application(settings=settings)
+        handler = next(iter(app.error_handlers))
+
+        ctx = MagicMock()
+        ctx.error = RuntimeError("boom")
+
+        with caplog.at_level(logging.ERROR):
+            await handler(update=MagicMock(), context=ctx)
+
+        matching = [r for r in caplog.records if "Unhandled exception" in r.message]
+        assert matching, "Expected error log with 'Unhandled exception'"
+        assert any("boom" in str(r.exc_info[1]) for r in matching if r.exc_info)
+
+
+class TestMain:
+    """main() entry point — bootstrap with config + run_polling."""
+
+    def test_main_exits_when_settings_load_fails(self, monkeypatch, caplog) -> None:
+        from src import bot as bot_mod
+        from src.config import ConfigurationError
+
+        def _raise(*_a, **_kw):
+            raise ConfigurationError("missing TOKEN")
+
+        monkeypatch.setattr(bot_mod, "load_settings", _raise)
+
+        with pytest.raises(SystemExit) as exc_info:
+            bot_mod.main()
+        assert exc_info.value.code == 1
+        assert any("missing TOKEN" in r.message for r in caplog.records)
+
+    def test_main_exits_when_build_application_fails(self, monkeypatch, caplog) -> None:
+        from src import bot as bot_mod
+        from src.config import ConfigurationError
+
+        valid_settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="pc",
+        )
+        monkeypatch.setattr(bot_mod, "load_settings", lambda: valid_settings)
+
+        def _build_fail(*_a, **_kw):
+            raise ConfigurationError("broken")
+
+        monkeypatch.setattr(bot_mod, "build_application", _build_fail)
+
+        with pytest.raises(SystemExit) as exc_info:
+            bot_mod.main()
+        assert exc_info.value.code == 1
+        assert any("broken" in r.message for r in caplog.records)
+
+    def test_main_runs_polling_on_success(self, monkeypatch) -> None:
+        from src import bot as bot_mod
+
+        valid_settings = Settings(
+            bot_token="123:FAKE",
+            authorized_chat_id=99999,
+            machine_name="pc",
+        )
+        monkeypatch.setattr(bot_mod, "load_settings", lambda: valid_settings)
+
+        polling_called = {"value": False}
+
+        class FakeApp:
+            def run_polling(self, **kwargs) -> None:
+                polling_called["value"] = True
+                polling_called["kwargs"] = kwargs
+
+        monkeypatch.setattr(bot_mod, "build_application", lambda settings: FakeApp())
+
+        bot_mod.main()
+        assert polling_called["value"] is True
+        assert polling_called["kwargs"] == {"drop_pending_updates": True}

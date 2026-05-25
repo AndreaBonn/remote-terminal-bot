@@ -93,6 +93,49 @@ class TestSettings:
         with pytest.raises(AttributeError):
             settings.machine_name = "other"  # type: ignore[misc]
 
+    def test_repr_redacts_bot_token(self) -> None:
+        settings = Settings(
+            bot_token="super-secret-token-12345",
+            authorized_chat_id=42,
+            machine_name="pc",
+        )
+        rendered = repr(settings)
+        assert "super-secret-token-12345" not in rendered
+        assert "***REDACTED***" in rendered
+        assert "pc" in rendered
+        assert "42" in rendered
+
+    def test_heartbeat_disabled_skips_interval_validation(self) -> None:
+        settings = Settings(
+            bot_token="tok",
+            authorized_chat_id=1,
+            machine_name="pc",
+            heartbeat_enabled=False,
+            heartbeat_interval=999999,
+        )
+        assert settings.heartbeat_enabled is False
+        assert settings.heartbeat_interval == 999999
+
+    def test_zero_heartbeat_interval_raises_when_enabled(self) -> None:
+        with pytest.raises(ConfigurationError, match="HEARTBEAT_INTERVAL must be positive"):
+            Settings(
+                bot_token="tok",
+                authorized_chat_id=1,
+                machine_name="pc",
+                heartbeat_enabled=True,
+                heartbeat_interval=0,
+            )
+
+    def test_negative_heartbeat_interval_raises_when_enabled(self) -> None:
+        with pytest.raises(ConfigurationError, match="HEARTBEAT_INTERVAL must be positive"):
+            Settings(
+                bot_token="tok",
+                authorized_chat_id=1,
+                machine_name="pc",
+                heartbeat_enabled=True,
+                heartbeat_interval=-5,
+            )
+
 
 class TestLoadSettings:
     """Loading from .env files."""
@@ -143,3 +186,45 @@ class TestLoadSettings:
         )
         settings = load_settings(env_path=env_file)
         assert settings.machine_name == "mydesktop"
+
+
+class TestParseBoolEnv:
+    """Boolean env parsing — covers HEARTBEAT_ENABLED and similar flags."""
+
+    @pytest.fixture(autouse=True)
+    def _clean_env(self, monkeypatch, tmp_path: Path) -> Path:
+        for key in (
+            "TELEGRAM_BOT_TOKEN",
+            "AUTHORIZED_CHAT_ID",
+            "MACHINE_NAME",
+            "HEARTBEAT_ENABLED",
+            "HEARTBEAT_INTERVAL",
+            "COMMAND_TIMEOUT",
+            "LOG_LEVEL",
+        ):
+            monkeypatch.delenv(key, raising=False)
+        return tmp_path
+
+    def _env_file(self, tmp_path: Path, extra: str) -> Path:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "TELEGRAM_BOT_TOKEN=tok\nAUTHORIZED_CHAT_ID=1\nMACHINE_NAME=pc\n" + extra,
+        )
+        return env_file
+
+    @pytest.mark.parametrize("value", ["false", "FALSE", "no", "NO", "0"])
+    def test_false_values_disable_heartbeat(self, tmp_path: Path, value: str) -> None:
+        env_file = self._env_file(tmp_path, f"HEARTBEAT_ENABLED={value}\n")
+        settings = load_settings(env_path=env_file)
+        assert settings.heartbeat_enabled is False
+
+    @pytest.mark.parametrize("value", ["true", "TRUE", "yes", "YES", "1"])
+    def test_true_values_enable_heartbeat(self, tmp_path: Path, value: str) -> None:
+        env_file = self._env_file(tmp_path, f"HEARTBEAT_ENABLED={value}\n")
+        settings = load_settings(env_path=env_file)
+        assert settings.heartbeat_enabled is True
+
+    def test_invalid_bool_value_raises_with_message(self, tmp_path: Path) -> None:
+        env_file = self._env_file(tmp_path, "HEARTBEAT_ENABLED=maybe\n")
+        with pytest.raises(ConfigurationError, match="HEARTBEAT_ENABLED.*must be true/false"):
+            load_settings(env_path=env_file)

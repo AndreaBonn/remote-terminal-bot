@@ -5,8 +5,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from dotenv import load_dotenv
+
+if TYPE_CHECKING:
+    from typing import NoReturn
 
 
 class ConfigurationError(Exception):
@@ -97,17 +101,16 @@ def load_settings(env_path: Path | None = None) -> Settings:
     )
 
 
-def _parse_int_env(key: str, default: int) -> int:
+def _parse_int_env(key: str, default: int) -> int:  # noqa: RET503  # _fatal is NoReturn
     """Parse an integer environment variable, raising ConfigurationError on failure."""
     raw = os.getenv(key, str(default))
     try:
         return int(raw)
     except ValueError:
         _fatal(f"{key} must be an integer, got: {raw!r}")
-        return default  # unreachable, satisfies type checker
 
 
-def _parse_bool_env(key: str, *, default: bool) -> bool:
+def _parse_bool_env(key: str, *, default: bool) -> bool:  # noqa: RET503  # _fatal is NoReturn
     """Parse a boolean environment variable (true/false, yes/no, 1/0)."""
     raw = os.getenv(key, str(default)).strip().lower()
     if raw in ("true", "yes", "1"):
@@ -115,9 +118,8 @@ def _parse_bool_env(key: str, *, default: bool) -> bool:
     if raw in ("false", "no", "0"):
         return False
     _fatal(f"{key} must be true/false, got: {raw!r}")
-    return default  # unreachable, satisfies type checker
 
 
-def _fatal(message: str) -> None:
+def _fatal(message: str) -> NoReturn:
     """Raise ConfigurationError for invalid settings."""
     raise ConfigurationError(message)
