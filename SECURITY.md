@@ -93,6 +93,63 @@ The service runs with strict kernel-level restrictions:
 
 ---
 
+## Threat Model
+
+This section makes explicit the assumptions, the in-scope risks, and the known limitations of the security model — so deployers can decide whether the trade-offs match their environment.
+
+### Trust boundary
+
+| Layer | What is trusted | What is not |
+|-------|-----------------|-------------|
+| Telegram account | Your account credentials and 2FA factor | Telegram infrastructure itself (out of scope) |
+| `AUTHORIZED_CHAT_ID` | The single chat ID configured in `.env` | Any other chat, even from the same account |
+| Local machine | The user running the bot (`User=%i` in systemd) | Other users on the same host |
+| `.env` file | File permissions `0600` on owner-only access | Backups, snapshots, or shared filesystems |
+
+### Shared-token model and its consequences
+
+**The same `TELEGRAM_BOT_TOKEN` is replicated across every PC running the bot.** This is a deliberate design choice (Telegram is the message bus) but it has two consequences that must be acknowledged:
+
+1. **Compromise of one PC compromises all PCs**
+   An attacker with read access to `.env` on any single machine obtains the bot token and can impersonate the bot from anywhere. Once authenticated as the bot, they can read all messages sent to the authorized chat and send commands back through any of the PCs that are online.
+
+2. **No per-PC revocation exists**
+   Telegram bot tokens cannot be scoped per-device. Revoking the token via BotFather invalidates it on every PC simultaneously. Granular access control is not possible without re-architecting away from "Telegram as bus".
+
+### Token rotation procedure
+
+If you suspect a token has leaked (e.g., a backup of `.env` was exposed, a PC was stolen, or a developer left the team), rotate the token using this exact sequence:
+
+```bash
+# 1. Revoke the old token in BotFather
+#    Send /revoke to @BotFather, select the bot, confirm.
+#    BotFather will issue a new token; copy it.
+
+# 2. On EVERY PC running the bot, in parallel:
+sudo systemctl stop telegram-terminal-bot@$USER
+nano ~/telegram-terminal-bot/.env       # paste the new TELEGRAM_BOT_TOKEN
+sudo systemctl start telegram-terminal-bot@$USER
+
+# 3. Verify on each PC:
+journalctl -u telegram-terminal-bot@$USER -n 20
+#    You should see the "🟢 [hostname] è online" notification on Telegram.
+```
+
+There is no automated propagation. The shorter the wall-clock gap between revoke and the last PC update, the smaller the downtime window — but no security risk arises from staggered updates, because the old token is dead immediately after step 1.
+
+### Out of scope
+
+The threat model intentionally does **not** cover:
+
+- A malicious Telegram account holder who possesses both the password and the 2FA second factor (assumed equivalent to "you")
+- Compromise of the Telegram service itself (governmental coercion, infrastructure breach)
+- Side-channel attacks on the host (memory dumps, kernel exploits below `systemd` hardening)
+- Supply-chain attacks on the bot's transitive Python dependencies — mitigated by CI `pip-audit`, not eliminated
+
+If your threat model includes any of the above, this bot is not the right tool. Use a properly authenticated SSH bastion with hardware-key MFA instead.
+
+---
+
 ## What You Should Do
 
 To maximize security on your end:

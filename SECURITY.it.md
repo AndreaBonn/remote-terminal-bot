@@ -93,6 +93,63 @@ Il servizio gira con restrizioni rigide a livello kernel:
 
 ---
 
+## Modello di Minaccia
+
+Questa sezione esplicita le assunzioni, i rischi nel perimetro e i limiti noti del modello di sicurezza — in modo che chi installa il bot possa valutare se i trade-off sono compatibili con il proprio contesto.
+
+### Perimetro di fiducia
+
+| Livello | Cosa è considerato fidato | Cosa non lo è |
+|---------|---------------------------|---------------|
+| Account Telegram | Le credenziali e il secondo fattore 2FA | L'infrastruttura Telegram stessa (fuori scope) |
+| `AUTHORIZED_CHAT_ID` | L'unico chat ID configurato in `.env` | Qualsiasi altra chat, anche dello stesso account |
+| Macchina locale | L'utente che esegue il bot (`User=%i` in systemd) | Altri utenti sullo stesso host |
+| File `.env` | Permessi `0600` con accesso solo al proprietario | Backup, snapshot, o filesystem condivisi |
+
+### Modello a token condiviso e conseguenze
+
+**Lo stesso `TELEGRAM_BOT_TOKEN` viene replicato su ogni PC che esegue il bot.** È una scelta architetturale deliberata (Telegram fa da bus di messaggistica) ma ha due conseguenze che vanno dichiarate:
+
+1. **Il compromesso di un PC compromette tutti i PC**
+   Un attaccante con accesso in lettura a `.env` su una qualsiasi macchina ottiene il token del bot e può impersonarlo da ovunque. Una volta autenticato come bot può leggere tutti i messaggi inviati alla chat autorizzata e rinviare comandi attraverso qualsiasi PC online.
+
+2. **Non esiste revoca per singolo PC**
+   I token bot di Telegram non sono scoping per dispositivo. Revocare il token tramite BotFather lo invalida su ogni PC simultaneamente. Un controllo accessi granulare non è possibile senza riarchitettare abbandonando "Telegram come bus".
+
+### Procedura di rotazione del token
+
+Se sospetti che un token sia stato esposto (es. un backup di `.env` reso pubblico, un PC rubato, o uno sviluppatore che lascia il team), ruota il token con questa sequenza esatta:
+
+```bash
+# 1. Revoca il vecchio token su BotFather
+#    Invia /revoke a @BotFather, seleziona il bot, conferma.
+#    BotFather restituirà un nuovo token; copialo.
+
+# 2. Su OGNI PC che esegue il bot, in parallelo:
+sudo systemctl stop telegram-terminal-bot@$USER
+nano ~/telegram-terminal-bot/.env       # incolla il nuovo TELEGRAM_BOT_TOKEN
+sudo systemctl start telegram-terminal-bot@$USER
+
+# 3. Verifica su ciascun PC:
+journalctl -u telegram-terminal-bot@$USER -n 20
+#    Dovresti vedere la notifica "🟢 [hostname] è online" su Telegram.
+```
+
+Non esiste una propagazione automatica. Più breve è l'intervallo tra la revoca e l'ultimo PC aggiornato, più piccola è la finestra di downtime — ma non si introducono rischi di sicurezza con aggiornamenti scaglionati, perché il vecchio token è morto subito dopo lo step 1.
+
+### Fuori scope
+
+Il modello di minaccia non copre intenzionalmente:
+
+- Un titolare malintenzionato dell'account Telegram in possesso sia della password sia del secondo fattore 2FA (assunto equivalente a "te")
+- Compromissione del servizio Telegram stesso (coercizione governativa, breach dell'infrastruttura)
+- Attacchi side-channel sull'host (memory dump, exploit kernel sotto l'hardening di `systemd`)
+- Attacchi di supply-chain sulle dipendenze Python transitive — mitigati dal `pip-audit` in CI, non eliminati
+
+Se il tuo modello di minaccia include uno di questi punti, questo bot non è lo strumento giusto. Usa un bastion SSH con MFA hardware-key.
+
+---
+
 ## Cosa Dovresti Fare Tu
 
 Per massimizzare la sicurezza dal tuo lato:
