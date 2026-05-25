@@ -49,6 +49,19 @@ info "Python trovato: $PYTHON_CMD ($($PYTHON_CMD --version))"
 # Create install directory (sync project files, remove stale)
 if [ "$SCRIPT_DIR" != "$INSTALL_DIR" ]; then
     mkdir -p "$INSTALL_DIR"
+
+    # If a previous install exists, the next rsync --delete would silently
+    # remove any local edits under $INSTALL_DIR/src/. Ask before doing so.
+    if [ -d "$INSTALL_DIR/src" ]; then
+        warn "Installazione esistente trovata in $INSTALL_DIR/src"
+        warn "Le modifiche locali in quella directory saranno SOVRASCRITTE."
+        read -r -p "Procedere con la sovrascrittura? [y/N] " reply
+        case "$reply" in
+            y|Y|yes|YES) ;;
+            *) error "Installazione annullata dall'utente." ;;
+        esac
+    fi
+
     rsync -a --delete "$SCRIPT_DIR"/src/ "$INSTALL_DIR/src/"
     rsync -a "$SCRIPT_DIR"/pyproject.toml "$INSTALL_DIR/"
     rsync -a "$SCRIPT_DIR"/uv.lock "$INSTALL_DIR/" 2>/dev/null || true
