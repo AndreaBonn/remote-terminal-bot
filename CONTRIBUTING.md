@@ -25,7 +25,7 @@ uv run mypy src/                       # Type check
 ## Pull Request Guidelines
 
 1. Fork the repository and create a feature branch
-2. Write tests for new functionality (maintain >70% coverage)
+2. Write tests for new functionality — the project ships at **100% line and branch coverage** and CI enforces it; any new code path must be exercised by a behavioral test before the PR can merge
 3. Run the full test suite before submitting
 4. Follow existing code style (enforced by ruff)
 5. Keep commits atomic with descriptive messages: `type(scope): description`

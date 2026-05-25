@@ -25,7 +25,7 @@ uv run mypy src/                       # Type check
 ## Linee Guida per le Pull Request
 
 1. Fai un fork del repository e crea un branch per la feature
-2. Scrivi test per le nuove funzionalità (mantieni >70% di copertura)
+2. Scrivi test per le nuove funzionalità — il progetto è rilasciato con **100% di line e branch coverage** e il CI lo impone; ogni nuovo path di codice deve essere coperto da un test comportamentale prima che il PR possa essere mergiato
 3. Esegui l'intera suite di test prima di inviare
 4. Segui lo stile di codice esistente (enforced da ruff)
 5. Mantieni i commit atomici con messaggi descrittivi: `tipo(scope): descrizione`
