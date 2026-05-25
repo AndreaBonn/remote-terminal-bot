@@ -174,8 +174,13 @@ class TestShellSessionLifecycle:
         await session.start()
         proc = session._process
 
-        # Patch wait() to time out so the fallback kill() path runs
-        async def _hang(*_args, **_kwargs):
+        # Patch wait_for to time out so the fallback kill() path runs.
+        # Closing the awaitable (self._process.wait()) is required because
+        # the argument is evaluated before our patch is invoked; leaving it
+        # un-awaited raises a RuntimeWarning.
+        async def _hang(awaitable, *_args, **_kwargs):
+            if hasattr(awaitable, "close"):
+                awaitable.close()
             raise asyncio.TimeoutError()
 
         with patch("asyncio.wait_for", side_effect=_hang):
