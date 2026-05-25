@@ -8,7 +8,7 @@ requires-python = ">=3.10"
 authors = [{ name = "bonn" }]
 keywords = ["telegram", "terminal", "remote", "shell", "bot"]
 classifiers = [
-    "Development Status :: 4 - Beta",
+    "Development Status :: 5 - Production/Stable",
     "Environment :: Console",
     "Intended Audience :: System Administrators",
     "License :: OSI Approved :: MIT License",
