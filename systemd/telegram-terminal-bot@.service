@@ -22,7 +22,13 @@ EnvironmentFile=/home/%i/telegram-terminal-bot/.env
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/home/%i/telegram-terminal-bot
+# Two writable paths:
+#   1) install dir — sources, .venv, .env, state cache
+#   2) XDG_DATA_HOME subdir — audit_log.py and state_manager.py default to
+#      ~/.local/share/telegram-terminal-bot/ for audit.jsonl and state.json.
+#      Without this entry, ProtectHome=read-only causes both files to fail
+#      silently (audit) or noisily (state) on the first write.
+ReadWritePaths=/home/%i/telegram-terminal-bot /home/%i/.local/share/telegram-terminal-bot
 ReadOnlyPaths=/etc /boot /usr /lib
 PrivateTmp=true
 ProtectKernelTunables=true

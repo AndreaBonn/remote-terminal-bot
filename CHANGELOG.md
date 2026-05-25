@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- `systemd/telegram-terminal-bot@.service`: extended `ReadWritePaths=` to
+  cover `~/.local/share/telegram-terminal-bot` in addition to the install
+  dir. Without this, `ProtectHome=read-only` made `audit_log.py` fail
+  silently on every command (`OSError` swallowed) and `state_manager.py`
+  log `ERROR` on every `/activate` without persisting `state.json`. Both
+  failures only surfaced under the systemd deployment path advertised in
+  README — not in `uv run python -m src.bot` direct runs.
+
 ### Added
 - `SECURITY.md` Threat Model section: trust boundary, shared-token
   consequences across N PCs, manual token rotation procedure, out-of-scope
