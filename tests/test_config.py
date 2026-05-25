@@ -122,6 +122,23 @@ class TestSettings:
         )
         assert settings.audit_log_enabled is False
 
+    def test_audit_redact_secrets_defaults_to_false(self) -> None:
+        settings = Settings(
+            bot_token="tok",
+            authorized_chat_id=1,
+            machine_name="pc",
+        )
+        assert settings.audit_redact_secrets is False
+
+    def test_audit_redact_secrets_can_be_enabled(self) -> None:
+        settings = Settings(
+            bot_token="tok",
+            authorized_chat_id=1,
+            machine_name="pc",
+            audit_redact_secrets=True,
+        )
+        assert settings.audit_redact_secrets is True
+
     def test_heartbeat_disabled_skips_interval_validation(self) -> None:
         settings = Settings(
             bot_token="tok",
@@ -217,6 +234,7 @@ class TestParseBoolEnv:
             "HEARTBEAT_ENABLED",
             "HEARTBEAT_INTERVAL",
             "AUDIT_LOG_ENABLED",
+            "AUDIT_REDACT_SECRETS",
             "COMMAND_TIMEOUT",
             "LOG_LEVEL",
         ):
@@ -256,3 +274,13 @@ class TestParseBoolEnv:
         env_file = self._env_file(tmp_path, "")
         settings = load_settings(env_path=env_file)
         assert settings.audit_log_enabled is True
+
+    def test_audit_redact_secrets_defaults_false_when_unset(self, tmp_path: Path) -> None:
+        env_file = self._env_file(tmp_path, "")
+        settings = load_settings(env_path=env_file)
+        assert settings.audit_redact_secrets is False
+
+    def test_audit_redact_secrets_true_via_env(self, tmp_path: Path) -> None:
+        env_file = self._env_file(tmp_path, "AUDIT_REDACT_SECRETS=true\n")
+        settings = load_settings(env_path=env_file)
+        assert settings.audit_redact_secrets is True

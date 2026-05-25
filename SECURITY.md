@@ -119,8 +119,29 @@ review the implications before leaving the log enabled.** Likely actions:
 - Or accept the trade-off and document the file as a system-of-record subject to
   the same controls as your shell history (`~/.bash_history`)
 
-The bot does **not** perform any secret-redaction on command strings. Treat the
-file with the same care you would treat the shell history of the user account.
+By default the bot does **not** perform any secret-redaction on command
+strings. Treat the file with the same care you would treat the shell history
+of the user account.
+
+#### Optional best-effort redaction (`AUDIT_REDACT_SECRETS`)
+
+Set `AUDIT_REDACT_SECRETS=true` in `.env` to enable a conservative
+regex-based redaction pass before each entry is written. When enabled, the
+following patterns are rewritten to `[REDACTED]`:
+
+| Pattern | Example before | Example after |
+|---|---|---|
+| `--password=`, `--token=`, `--secret=`, `--api-key=` | `curl --token=abc123` | `curl --token=[REDACTED]` |
+| `mysql\|mysqldump\|mariadb` with `-p<pwd>` | `mysql -psecret -h db` | `mysql -p[REDACTED] -h db` |
+| Env-var assignments whose name ends in `_KEY`, `_TOKEN`, `_SECRET`, `_PASSWORD`, `_PASSWD`, `_PWD`, `_CRED`, `_CREDENTIALS` | `AWS_SECRET_ACCESS_KEY=AKIA...` | `AWS_SECRET_ACCESS_KEY=[REDACTED]` |
+| `Authorization: Bearer\|Basic <token>` | `-H 'Authorization: Bearer xyz'` | `-H 'Authorization: Bearer [REDACTED]'` |
+
+This redaction is **best-effort, not a security boundary**. Secrets passed
+in shapes not covered above (positional arguments, custom prefixes,
+heredocs, base64-encoded blobs) will still be recorded verbatim. The
+toggle exists to reduce accidental leakage of obvious cases, not to make
+the file safe to share. If your threat model requires guaranteed
+redaction, set `AUDIT_LOG_ENABLED=false` instead.
 
 ---
 

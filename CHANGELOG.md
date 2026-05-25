@@ -17,6 +17,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   README — not in `uv run python -m src.bot` direct runs.
 
 ### Added
+- `AUDIT_REDACT_SECRETS` (default `false`) opt-in flag that enables a
+  conservative regex-based redaction pass for common secret shapes
+  (`--password=`, `mysql -p<pwd>`, `AWS_SECRET_*=`,
+  `Authorization: Bearer …`) before audit-log entries are persisted.
+  Best-effort only — see `SECURITY.md § Audit Log` for the explicit
+  non-guarantees and the recommended `AUDIT_LOG_ENABLED=false`
+  alternative for strict compliance use cases.
 - `SECURITY.md` Threat Model section: trust boundary, shared-token
   consequences across N PCs, manual token rotation procedure, out-of-scope
   risks (bilingual EN + IT).
