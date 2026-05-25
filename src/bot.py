@@ -18,6 +18,7 @@ from telegram.ext import (
     filters,
 )
 
+from src.audit_log import AuditLog
 from src.config import ConfigurationError, Settings, load_settings
 from src.handlers import _HEARTBEAT_PREFIX, create_handlers
 from src.shell_session import ShellSession
@@ -176,8 +177,6 @@ def build_application(env_path: Path | None = None, settings: Settings | None = 
     """
     if settings is None:
         settings = load_settings(env_path=env_path)
-
-    from src.audit_log import AuditLog
 
     shell = ShellSession(timeout=settings.command_timeout)
     state = StateManager(
