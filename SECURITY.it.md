@@ -91,6 +91,37 @@ Il servizio gira con restrizioni rigide a livello kernel:
 | **Nessun server centrale** | Telegram stesso è l'unico intermediario — nessuna infrastruttura di terze parti |
 | **Socket families ristrette** | systemd consente solo IPv4, IPv6 e socket Unix |
 
+### Audit Log — Disclosure
+
+Quando `AUDIT_LOG_ENABLED=true` (default), il bot scrive un record JSON Lines per
+ogni comando eseguito in `~/.local/share/telegram-terminal-bot/audit.jsonl`:
+
+```json
+{"ts": "2026-05-25T10:42:11+0200", "machine": "desktop", "command": "ls -la /etc",
+ "exit_code": 0, "timed_out": false, "duration_ms": 12}
+```
+
+Proprietà rilevanti:
+
+| Proprietà | Valore |
+|-----------|--------|
+| Formato | JSON Lines in UTF-8 testo (nessuna compressione, nessuna cifratura) |
+| Permessi | Eredita `UMask=0077` da systemd: lettura/scrittura solo del proprietario |
+| Retention | Illimitata — il file cresce finché non viene ruotato o rimosso manualmente |
+| Contenuto | Stringa del comando troncata a 2048 caratteri. I segreti passati inline (es. `mysql -p<password>`, `export AWS_SECRET=...`) **verranno registrati in chiaro** |
+| Trasporto | Solo su disco locale — mai trasmesso via rete |
+
+**Se gestisci il bot in un ambiente regolamentato (GDPR, HIPAA, SOC 2, PCI),
+valuta le implicazioni prima di lasciarlo abilitato.** Azioni possibili:
+
+- Imposta `AUDIT_LOG_ENABLED=false` per disabilitare del tutto la creazione del file
+- Oppure ruota `audit.jsonl` con una policy compatibile con le tue regole di retention
+- Oppure accetta il trade-off e documenta il file come system-of-record soggetto
+  agli stessi controlli della shell history utente (`~/.bash_history`)
+
+Il bot **non** esegue alcuna redazione di segreti sulle stringhe dei comandi.
+Tratta il file con la stessa cura della shell history dell'account utente.
+
 ---
 
 ## Modello di Minaccia

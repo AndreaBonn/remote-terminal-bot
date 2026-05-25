@@ -31,6 +31,7 @@ class Settings:
     command_timeout: int = 30
     heartbeat_enabled: bool = True
     heartbeat_interval: int = 60
+    audit_log_enabled: bool = True
     log_level: str = "INFO"
 
     def __repr__(self) -> str:
@@ -89,6 +90,7 @@ def load_settings(env_path: Path | None = None) -> Settings:
     heartbeat_interval = _parse_int_env("HEARTBEAT_INTERVAL", 60)
 
     heartbeat_enabled = _parse_bool_env("HEARTBEAT_ENABLED", default=True)
+    audit_log_enabled = _parse_bool_env("AUDIT_LOG_ENABLED", default=True)
 
     return Settings(
         bot_token=os.getenv("TELEGRAM_BOT_TOKEN", ""),
@@ -97,6 +99,7 @@ def load_settings(env_path: Path | None = None) -> Settings:
         command_timeout=command_timeout,
         heartbeat_enabled=heartbeat_enabled,
         heartbeat_interval=heartbeat_interval,
+        audit_log_enabled=audit_log_enabled,
         log_level=os.getenv("LOG_LEVEL", "INFO").upper(),
     )
 

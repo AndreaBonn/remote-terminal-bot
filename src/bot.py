@@ -183,7 +183,7 @@ def build_application(env_path: Path | None = None, settings: Settings | None = 
         machine_name=settings.machine_name,
         heartbeat_interval=settings.heartbeat_interval,
     )
-    audit = AuditLog()
+    audit = AuditLog() if settings.audit_log_enabled else None
 
     handlers = create_handlers(
         state=state,

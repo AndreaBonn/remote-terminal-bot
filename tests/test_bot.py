@@ -66,6 +66,22 @@ class TestBuildApplication:
         app = build_application(settings=settings)
         assert app.bot_data["settings"].machine_name == "preloaded-pc"
 
+    def test_builds_with_audit_log_disabled_passes_none_to_handlers(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        env_file = tmp_path / ".env"
+        env_file.write_text(
+            "TELEGRAM_BOT_TOKEN=123:FAKE\nAUTHORIZED_CHAT_ID=99999\n"
+            "MACHINE_NAME=test-pc\nAUDIT_LOG_ENABLED=false\n",
+        )
+        from src.bot import build_application
+
+        app = build_application(env_path=env_file)
+        # With audit_log_enabled=False, build_application must not instantiate
+        # AuditLog — no audit.jsonl file is created on disk for this run.
+        assert app.bot_data["settings"].audit_log_enabled is False
+
     def test_builds_with_custom_log_level(self, tmp_path: Path) -> None:
         env_file = tmp_path / ".env"
         env_file.write_text(

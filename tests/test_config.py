@@ -105,6 +105,23 @@ class TestSettings:
         assert "pc" in rendered
         assert "42" in rendered
 
+    def test_audit_log_enabled_defaults_to_true(self) -> None:
+        settings = Settings(
+            bot_token="tok",
+            authorized_chat_id=1,
+            machine_name="pc",
+        )
+        assert settings.audit_log_enabled is True
+
+    def test_audit_log_can_be_disabled(self) -> None:
+        settings = Settings(
+            bot_token="tok",
+            authorized_chat_id=1,
+            machine_name="pc",
+            audit_log_enabled=False,
+        )
+        assert settings.audit_log_enabled is False
+
     def test_heartbeat_disabled_skips_interval_validation(self) -> None:
         settings = Settings(
             bot_token="tok",
@@ -199,6 +216,7 @@ class TestParseBoolEnv:
             "MACHINE_NAME",
             "HEARTBEAT_ENABLED",
             "HEARTBEAT_INTERVAL",
+            "AUDIT_LOG_ENABLED",
             "COMMAND_TIMEOUT",
             "LOG_LEVEL",
         ):
@@ -228,3 +246,13 @@ class TestParseBoolEnv:
         env_file = self._env_file(tmp_path, "HEARTBEAT_ENABLED=maybe\n")
         with pytest.raises(ConfigurationError, match="HEARTBEAT_ENABLED.*must be true/false"):
             load_settings(env_path=env_file)
+
+    def test_audit_log_enabled_false_via_env(self, tmp_path: Path) -> None:
+        env_file = self._env_file(tmp_path, "AUDIT_LOG_ENABLED=false\n")
+        settings = load_settings(env_path=env_file)
+        assert settings.audit_log_enabled is False
+
+    def test_audit_log_enabled_defaults_true_when_unset(self, tmp_path: Path) -> None:
+        env_file = self._env_file(tmp_path, "")
+        settings = load_settings(env_path=env_file)
+        assert settings.audit_log_enabled is True
