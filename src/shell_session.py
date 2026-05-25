@@ -195,7 +195,11 @@ class ShellSession:
         if truncated:
             stdout_lines.append("[OUTPUT TRUNCATED: exceeded 512KB limit]")
 
-        # Read available stderr (non-blocking drain)
+        # Best-effort drain of stderr: bash writes the marker to stderr separately,
+        # but stderr is not synchronized with stdout, so the marker may arrive late
+        # or not at all if buffering kicks in. A short per-line timeout (100ms) lets
+        # us collect what's available without blocking the next command if the
+        # marker line is delayed. Lost stderr lines on noisy commands are tolerated.
         while True:
             try:
                 line = await asyncio.wait_for(
