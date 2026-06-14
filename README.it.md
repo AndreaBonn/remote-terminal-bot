@@ -212,6 +212,14 @@ Se trovi utile questo bot, lascia una stella su GitHub — aiuta altri a scoprir
 
 [![Star on GitHub](https://img.shields.io/github/stars/AndreaBonn/remote-terminal-bot?style=social)](https://github.com/AndreaBonn/remote-terminal-bot)
 
+Telegram Terminal Bot è gratuito. Se ti è utile e vuoi contribuire, puoi lasciare un'offerta tramite PayPal. L'importo lo scegli tu ed è del tutto facoltativo.
+
+<div align="center">
+
+[![Dona con PayPal](https://img.shields.io/badge/Dona-PayPal-00457C?logo=paypal&logoColor=white&style=for-the-badge)](https://paypal.me/AndreaBonacci19)
+
+</div>
+
 ## Licenza
 
 [MIT](LICENSE) — Copyright (c) 2026 [Andrea Bonacci](https://github.com/AndreaBonn)
