@@ -13,7 +13,7 @@ jobs:
     name: AI Code Review
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: AndreaBonn/ai-pr-reviewer@main
         with:
           llm_provider: 'groq,gemini,openai'
